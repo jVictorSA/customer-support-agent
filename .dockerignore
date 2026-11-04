@@ -12,3 +12,7 @@ __pycache__
 deploy
 graphify-out
 docs
+.agents
+AGENTS.md
+opencode.json
+data

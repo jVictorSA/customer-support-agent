@@ -96,8 +96,9 @@ uv run fastapi dev
 ## Migrations
 
 O Alembic está configurado para usar a mesma `Settings` da aplicação, com engine
-async. Ainda não existe migration inicial: a primeira será criada junto da
-primeira entidade.
+async. A migration inicial cria as tabelas `categories`, `products`,
+`customers`, `orders`, `order_items` e `promotions`, com enums nativos do
+Postgres, índices, checks e colunas de auditoria.
 
 Comandos canônicos, executados dentro do container da API:
 
@@ -116,11 +117,34 @@ docker compose exec api alembic downgrade -1
 ```
 
 Os models ORM de cada módulo devem ser importados em
-`src/customer_support_agent/db/metadata.py` para que o `--autogenerate` os
+`src/app/db/metadata.py` para que o `--autogenerate` os
 encontre.
 
 As migrations não rodam automaticamente no startup da API. Isso evita corrida
 entre réplicas e mantém o deploy explícito.
+
+## Importação de dados
+
+Os dados operacionais podem ser carregados por CSVs, sem endpoint de upload e
+sem rodar no startup. O comando aceita um diretório com seis arquivos:
+`categories.csv`, `products.csv`, `customers.csv`, `orders.csv`,
+`order_items.csv` e `promotions.csv`.
+
+```bash
+# aplicar a migration antes da primeira carga
+docker compose exec api alembic upgrade head
+
+# importar/atualizar (idempotente, upsert por PK)
+uv run import-csv data/
+
+# recarregar do zero
+uv run import-csv data/ --truncate
+```
+
+Os cabeçalhos devem corresponder às colunas do modelo. `specs` é um objeto JSON,
+datas usam ISO-8601 e booleanos aceitam `true/false` ou `0/1`. Os CSVs não são
+versionados; `data/` está no `.gitignore`. A importação inteira roda em uma
+transação e ajusta as sequences após inserir IDs explícitos.
 
 ## Testes
 
@@ -140,7 +164,9 @@ uv run pytest -m integration
 ```
 
 O banco `customer_support_agent_test` é criado automaticamente pelo script em
-`docker/postgres/init/` na primeira inicialização do volume.
+`docker/postgres/init/` na primeira inicialização do volume. O fixture de
+integração aplica `alembic upgrade head` nesse banco automaticamente antes dos
+testes; não é preciso migrar manualmente.
 
 ## Endpoints
 
@@ -149,6 +175,39 @@ O banco `customer_support_agent_test` é criado automaticamente pelo script em
 | `GET` | `/` | Nome, versão e status da API |
 | `GET` | `/health` | Liveness da API |
 | `GET` | `/health/db` | Readiness do banco (`SELECT 1`) |
+| `GET` | `/categories` | Lista paginada de categorias |
+| `GET` | `/categories/{category_id}` | Detalhe da categoria |
+| `GET` | `/products` | Lista paginada; filtros `category_id`, `status`, `name`, `max_price` |
+| `GET` | `/products/{product_id}` | Detalhe do produto |
+| `GET` | `/customers` | Lista paginada; filtros `city`, `name` |
+| `GET` | `/customers/{customer_id}` | Detalhe do cliente |
+| `GET` | `/orders` | Lista paginada; filtros `customer_id`, `status` |
+| `GET` | `/orders/{order_id}` | Detalhe do pedido com itens |
+| `GET` | `/promotions` | Lista paginada; filtros `product_id`, `is_active` |
+| `GET` | `/promotions/{promotion_id}` | Detalhe da promoção |
+
+### Paginação e erros
+
+As listas usam `page` (padrão `1`) e `page_size` (padrão `20`, máximo `100`) e
+retornam:
+
+```json
+{
+  "items": [],
+  "total": 0,
+  "page": 1,
+  "page_size": 20
+}
+```
+
+Recursos inexistentes retornam o status adequado e um corpo estável:
+
+```json
+{
+  "code": "product_not_found",
+  "message": "Product 999 not found"
+}
+```
 
 ### `GET /health/db`
 
@@ -210,26 +269,42 @@ Postgres gerenciado, caso necessário.
 │   └── .env.prod
 ├── docker/
 │   └── postgres/init/        # criação do banco de testes
-├── docs/
-│   └── dev-docs/             # documentação de referência do domínio
+├── .agents/
+│   ├── project-context/      # perfil do projeto para agentes
+│   ├── rules/                # regras sempre carregadas
+│   └── skills/               # fluxos reutilizáveis
 ├── src/
-│   └── customer_support_agent/
-│       ├── app.py            # aplicação FastAPI e lifespan
+│   └── app/
+│       ├── main.py           # aplicação FastAPI e lifespan
 │       ├── core/
-│       │   └── config.py     # Settings da aplicação
+│       │   ├── config.py     # Settings da aplicação
+│       │   └── exceptions.py # AppError e bases de erro
 │       ├── db/
 │       │   ├── base.py       # Base declarativa + naming convention
 │       │   ├── metadata.py   # metadata para o Alembic
 │       │   └── session.py    # engine, session factory e startup probe
+│       ├── presentation/
+│       │   ├── exception_handlers.py  # handler global de erros
+│       │   └── pagination.py          # Page[T] e parâmetros de paginação
+│       ├── infrastructure/importing/  # importador CSV
+│       ├── cli/import_csv.py          # comando import-csv
 │       └── modules/
-│           └── health/
-│               ├── domain/
-│               ├── application/
-│               ├── infrastructure/
-│               └── presentation/
+│           ├── health/
+│           ├── categories/
+│           ├── products/
+│           ├── customers/
+│           ├── orders/
+│           └── promotions/
 ├── tests/
-│   ├── health/
+│   ├── categories/
+│   ├── products/
+│   ├── customers/
+│   ├── orders/
+│   ├── promotions/
+│   ├── importing/
 │   └── integration/
+├── AGENTS.md
+├── opencode.json
 ├── alembic.ini
 ├── compose.yaml
 ├── compose.override.yaml
@@ -238,6 +313,31 @@ Postgres gerenciado, caso necessário.
 ├── pyproject.toml
 └── uv.lock
 ```
+
+## Codificação com agentes de IA
+
+O desenvolvimento deste repositório usa o [OpenCode](https://opencode.ai/) como
+assistente de código. A configuração é versionada para que o mesmo contexto
+valha para qualquer pessoa ou ferramenta que trabalhe no projeto:
+
+- `AGENTS.md`: instruções permanentes, comandos, convenções e definição de
+  pronto.
+- `.agents/rules/`: regras sempre carregadas sobre fronteiras de arquitetura,
+  persistência/migrations, integrações de IA e validação.
+- `.agents/project-context/`: perfil versionado do projeto, derivado do código,
+  do README e do escopo de negócio registrado em `domain.md`. `PROJECT.md`
+  funciona como mapa de leitura dos demais arquivos.
+- `.agents/skills/`: fluxos reutilizáveis para configurar/atualizar o contexto
+  (`project-context-setup`), criar módulos de negócio (`new-module`), criar e
+  revisar migrations (`db-migration`), revisar o staged antes do commit
+  (`pre-commit-review`) e gerar descrições de PR (`pr-description`).
+
+O fluxo usado é: carregar o contexto e as regras antes de implementar; usar as
+skills para scaffolding e migrations; rodar `uv run pytest`; revisar o staged
+com `pre-commit-review`; e registrar decisões de arquitetura em
+`.agents/project-context/architecture.md`.
+Nenhuma ferramenta de IA roda em produção — o agente de atendimento ao cliente é
+o produto, não o assistente de codificação.
 
 ## Decisões de arquitetura
 
@@ -256,7 +356,16 @@ Postgres gerenciado, caso necessário.
 - **Base declarativa com naming convention** para nomes previsíveis de
   constraints e índices.
 - **Módulos em Clean Architecture**: `domain`, `application`, `infrastructure`
-  e `presentation`. O módulo `health` serve de referência para os próximos.
+  e `presentation`. O módulo `health` é a menor referência; os módulos de
+  negócio mostram o padrão completo.
+- **PKs inteiras com `Identity` e `TimestampMixin`** em todas as tabelas;
+  `order_items` usa PK composta e pertence ao agregado `orders`.
+- **Dinheiro em `Numeric(12,2)` + `Decimal`**, com `float` apenas na resposta
+  JSON; enums de status/pagamento são tipos nativos do Postgres.
+- **Listas paginadas** com `page`/`page_size` e envelope `items/total/page/
+  page_size`; erros de aplicação retornam `{code, message}`.
+- **Importação CSV idempotente** via `import-csv`, em uma transação, com upsert
+  por PK e reset de sequences; nunca roda no startup.
 - **Startup com retries limitados e modo degradado**: se o banco não responder,
   a API sobe, loga o problema e `/health/db` retorna 503.
 - **UTC** no banco e na aplicação. A conversão para `America/Sao_Paulo` deve

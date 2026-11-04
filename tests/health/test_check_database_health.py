@@ -1,6 +1,6 @@
 import asyncio
 
-from customer_support_agent.modules.health.application.check_database_health import (
+from app.modules.health.application.check_database_health import (
     CheckDatabaseHealthUseCase,
 )
 
