@@ -8,14 +8,14 @@ Source of truth: `.agents/project-context/validation.md`.
 uv run pytest
 ```
 
-Run it after every code change. The verified baseline is `10 passed, 1 skipped`;
-the skipped test is the opt-in Postgres integration test.
+Run it after every code change. The verified baseline is `36 passed, 3 skipped`;
+the skipped tests are the opt-in Postgres integration tests.
 
 ## Mandatory
 
 - Test behavior and contracts, not private implementation details.
 - Unit tests must not access the database. Use fakes implementing the
-  `Protocol` ports and override FastAPI dependencies with
+  `Protocol` interfaces and override FastAPI dependencies with
   `app.dependency_overrides`.
 - Repository/query behavior that cannot be guaranteed by a fake needs an
   opt-in integration test using `customer_support_agent_test`, never the
@@ -27,6 +27,9 @@ the skipped test is the opt-in Postgres integration test.
     uv run pytest -m integration
   ```
 
+  The integration fixture applies `alembic upgrade head` to the dedicated test
+  database automatically when `RUN_INTEGRATION_TESTS=1`.
+
 - Add or update tests with the change; do not leave a new public behavior
   untested.
 - For API changes, exercise the route through `TestClient` and assert status
@@ -35,6 +38,8 @@ the skipped test is the opt-in Postgres integration test.
   `.env.example`, `deploy/.env.hml`, and `deploy/.env.prod` consistent.
 - For migrations, review generated SQL and verify `upgrade`/`downgrade` inside
   the API container.
+- For CSV import changes, run the parser unit tests and the importer integration
+  test; verify `uv run import-csv <dir> --truncate` after `alembic upgrade head`.
 - Do not claim lint, formatting, type-check, or CI checks passed: none are
   configured. Do not add them as if they already exist; propose them separately.
 

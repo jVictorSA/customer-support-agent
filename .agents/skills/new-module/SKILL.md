@@ -3,7 +3,7 @@ name: new-module
 description: >-
   Scaffolds a new business module following this repository's four-layer Clean
   Architecture (domain, application, infrastructure, presentation), including
-  ports, use cases, SQLAlchemy models/repository, Pydantic schemas, router,
+  interfaces, use cases, SQLAlchemy models/repository, Pydantic schemas, router,
   dependency wiring, registration, tests, and Alembic migration. Use when the
   user asks to create a new module, feature module, entity, use case, endpoint,
   or to implement one of the business domains (products, orders, customers,
@@ -12,9 +12,9 @@ description: >-
 
 # New Business Module
 
-Create one module under `src/customer_support_agent/modules/<module>/` that
+Create one module under `src/app/modules/<module>/` that
 follows the established `health` pattern. Do not add business logic to routers,
-repositories, or `app.py`.
+repositories, or `main.py`.
 
 Canonical contract: `.agents/project-context/architecture.md`,
 `.agents/project-context/domain.md`, and the established `health` module.
@@ -24,12 +24,14 @@ Canonical contract: `.agents/project-context/architecture.md`,
 - Read `.agents/project-context/architecture.md`,
   `.agents/project-context/conventions.md`, and
   `.agents/project-context/domain.md` before writing code.
-- Ask before choosing the primary-key strategy or timestamp mixin if the
-  repository still has no decision. Do not silently invent one.
+- Use the established persistence conventions: integer `Identity` primary keys
+  named after the entity, the shared `TimestampMixin`, `Numeric(12,2)` +
+  `Decimal` for money, native Postgres enums, and `order_items` inside the
+  `orders` aggregate. Do not invent a second convention.
 - Keep `domain` framework-free, `application` free of SQLAlchemy/FastAPI, and
   `presentation` free of `infrastructure` outside `dependencies.py`.
 - Do not add a model without registering it in `db/metadata.py`.
-- Do not add an endpoint without registering its router in `app.py`.
+- Do not add an endpoint without registering its router in `main.py`.
 - Do not run migrations against a non-test database. Do not edit applied
   migrations.
 - Do not introduce lint/type-check/CI config in this workflow.
@@ -43,12 +45,12 @@ New Module Progress:
 - [ ] 1. Confirm scope, entities, and open decisions
 - [ ] 2. Create the four-layer package
 - [ ] 3. Model domain entities/value objects
-- [ ] 4. Declare application ports
+- [ ] 4. Declare application interfaces
 - [ ] 5. Implement the use case
 - [ ] 6. Implement ORM model and repository
 - [ ] 7. Register metadata and schemas
 - [ ] 8. Implement router and dependencies
-- [ ] 9. Register the router in app.py
+- [ ] 9. Register the router in main.py
 - [ ] 10. Add unit and integration tests
 - [ ] 11. Create and review the migration
 - [ ] 12. Update documentation and validate
@@ -64,16 +66,15 @@ Record open decisions for the user instead of guessing.
 ### 2. Create the package
 
 ```text
-src/customer_support_agent/modules/<module>/
+src/app/modules/<module>/
 ├── __init__.py
 ├── domain/__init__.py
 ├── application/__init__.py
-├── application/ports.py
+├── application/interfaces.py
 ├── application/<action>.py
 ├── infrastructure/__init__.py
-├── infrastructure/persistence/__init__.py
-├── infrastructure/persistence/models.py
-├── infrastructure/persistence/repository.py
+├── infrastructure/models.py
+├── infrastructure/repository.py
 ├── presentation/__init__.py
 ├── presentation/router.py
 ├── presentation/dependencies.py
@@ -90,15 +91,16 @@ Only create `domain` files when a real rule/value object exists; an empty
 - Use dataclasses/enums/value objects; raise domain exceptions only when a rule
   needs to signal failure.
 
-### 4. Ports
+### 4. Interfaces
 
 Declare repository/service contracts with `typing.Protocol` in
-`application/ports.py`, mirroring `modules/health/application/ports.py`:
+`application/interfaces.py`, mirroring
+`modules/health/application/interfaces.py`:
 
 ```python
 from typing import Protocol
 
-from customer_support_agent.modules.<module>.domain.<entity> import <Entity>
+from app.modules.<module>.domain.<entity> import <Entity>
 
 
 class <Entity>Repository(Protocol):
@@ -110,7 +112,7 @@ class <Entity>Repository(Protocol):
 ```python
 from dataclasses import dataclass
 
-from customer_support_agent.modules.<module>.application.ports import (
+from app.modules.<module>.application.interfaces import (
     <Entity>Repository,
 )
 
@@ -133,8 +135,8 @@ Receive configuration explicitly through the constructor; never call
 
 ### 6. ORM model and repository
 
-- Model in `infrastructure/persistence/models.py`, inheriting `Base` from
-  `customer_support_agent.db.base`.
+- Model in `infrastructure/models.py`, inheriting `Base` from
+  `app.db.base`.
 - Add `to_domain()`/`from_domain()` mapping as needed; never return ORM models
   upward.
 - Every public repository method opens one transaction:
@@ -155,7 +157,7 @@ class SqlAlchemy<Entity>Repository:
 
 ### 7. Metadata and schemas
 
-- Import the new model in `src/customer_support_agent/db/metadata.py`.
+- Import the new model in `src/app/db/metadata.py`.
 - Add request/response models in `presentation/schemas.py`, separate from both
   ORM models and domain entities. Include `from_domain` mapping where useful.
 
@@ -169,7 +171,7 @@ class SqlAlchemy<Entity>Repository:
 
 ### 9. Register the router
 
-Edit `src/customer_support_agent/app.py` and include the module router next to
+Edit `src/app/main.py` and include the module router next to
 `health_router`.
 
 ### 10. Tests

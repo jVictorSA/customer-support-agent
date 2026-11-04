@@ -38,8 +38,8 @@ Canonical contract: `.agents/project-context/architecture.md` and
    ```
 
 2. Every new ORM model is imported in
-   `src/customer_support_agent/db/metadata.py`.
-3. The model lives in `modules/<module>/infrastructure/persistence/models.py`
+   `src/app/db/metadata.py`.
+3. The model lives in `modules/<module>/infrastructure/models.py`
    and uses the shared `Base`.
 4. The application tests pass before generating a migration:
 
@@ -63,7 +63,7 @@ Migration Progress:
 
 ```bash
 docker compose exec api alembic current
-git diff -- src/customer_support_agent/db src/customer_support_agent/modules
+git diff -- src/app/db src/app/modules
 ```
 
 ### 2. Generate

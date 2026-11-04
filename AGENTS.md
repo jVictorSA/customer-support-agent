@@ -14,8 +14,8 @@ detailed contracts live in `.agents/project-context/`.
 4. For routes, schemas, configuration, deploy, or migrations, read
    `.agents/project-context/delivery-contracts.md`.
 5. For LLM/RAG/tool-calling work, read `.agents/project-context/ai.md`.
-6. For business entities, use cases, store rules, or the planned data model,
-   read `.agents/project-context/domain.md`.
+6. For business entities, use cases, store rules, or the data model, read
+   `.agents/project-context/domain.md`.
 7. Before validating or committing, read `.agents/project-context/validation.md`.
 
 The always-on rules are in `.agents/rules/` and are loaded automatically. They
@@ -25,15 +25,16 @@ are mandatory.
 
 A Python 3.12 FastAPI backend for a customer-support agent for a musical
 instrument store. Postgres 17.11, SQLAlchemy 2.x async (`asyncpg`), Alembic,
-`pydantic-settings`, `uv`, Docker Compose, pytest/pytest-asyncio. The business
-AI integration is not implemented yet; the current `health` module is the
-reference Clean Architecture pattern.
+`pydantic-settings`, `uv`, Docker Compose, pytest/pytest-asyncio. Business
+modules `categories`, `products`, `customers`, `orders` and `promotions` are
+implemented with GET-only routes, paginated responses and full CRUD
+repositories. The AI integration is not implemented yet.
 
 ## Architecture in one line
 
 `presentation -> application -> domain`; `infrastructure` implements
-`application` ports. Routers never touch the database; repositories own all
-transactions and commit; use cases depend on `Protocol` ports.
+`application` interfaces. Routers never touch the database; repositories own all
+transactions and commit; use cases depend on `Protocol` interfaces.
 
 ## Commands
 
@@ -80,10 +81,13 @@ separately.
   presentation.
 - Do not expose stack traces, SQL, credentials, prompts, or customer PII in
   HTTP responses. Internal detail only when `APP_ENV=development`.
-- Do not invent open decisions: primary-key strategy, timestamp mixin, error
-  catalog/format, pagination/filters, authentication, and lint/CI tooling are
-  still open (no such abstraction or dependency exists in `db/base.py`,
-  `pyproject.toml`, or `src/customer_support_agent/`).
+- Do not invent open decisions: authentication/authorization, write endpoints,
+  the full error catalog beyond 404/409/400, and lint/CI tooling are still open.
+- Persistence conventions are fixed: integer `Identity` PKs, `TimestampMixin`,
+  `Numeric(12,2)` + `Decimal` for money, native Postgres enums, and
+  `order_items` inside the `orders` aggregate.
+- List routes use `page`/`page_size` + `total`; errors use `{code, message}`.
+- Bulk data enters through `import-csv`, never at API startup.
 
 ## Workflows and skills
 

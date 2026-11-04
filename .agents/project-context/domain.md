@@ -31,27 +31,31 @@ The product is a text customer-support agent that:
   validity — these must come from system data;
 - hands off to a human when a complaint or decision exceeds its authority.
 
-## Planned data model
+## Data model
 
-The operational model has six tables. No ORM models or migrations exist yet.
+The operational model has six tables, implemented as ORM models with an initial
+Alembic migration. All tables have integer `Identity` primary keys (except
+`order_items`, which uses a composite key) and `created_at`/`updated_at`
+timestamptz columns. Money is stored as `Numeric(12, 2)` and exposed as decimal
+in the domain.
 
 - **categories** — `category_id` (int), `name`, `description`. One category has
   many products.
-- **products** — `product_id` (int), `price_brl` (float), `name`,
+- **products** — `product_id` (int), `price_brl` (numeric), `name`,
   `category_id` (FK), `description`, `stock_quantity` (int), `status`
-  (`active` | `coming_soon` | `discontinued`), `specs` (JSON), `created_at`.
+  (`active` | `coming_soon` | `discontinued`, native enum), `specs` (JSONB).
 - **customers** — `customer_id` (int), `name`, `phone`, `email`, `city`. One
   customer has many orders.
-- **orders** — `order_id` (int), `customer_id` (FK), `order_date`,
-  `status` (`cancelled` | `confirmed` | `delivered` | `pending` | `shipped`),
-  `total_brl` (float), `payment_method`
-  (`boleto` | `pix` | `debit` | `credit_3x` | `credit_6x` | `credit_12x`),
-  `tracking_code`, `estimated_delivery`, `notes`.
-- **order_items** — `order_id` (FK), `product_id` (FK), `quantity` (int).
-  Join table between orders and products.
+- **orders** — `order_id` (int), `customer_id` (FK), `order_date`, `status`
+  (`cancelled` | `confirmed` | `delivered` | `pending` | `shipped`, native
+  enum), `total_brl` (numeric), `payment_method`
+  (`boleto` | `pix` | `debit` | `credit_3x` | `credit_6x` | `credit_12x`,
+  native enum), `tracking_code`, `estimated_delivery`, `notes`.
+- **order_items** — composite PK `(order_id, product_id)`, `quantity` (int).
+  Join table between orders and products; it is part of the `orders` module.
 - **promotions** — `promotion_id` (int), `product_id` (FK),
-  `discount_percent` (int), `description`, `is_active` (bool). One product may
-  have promotions.
+  `discount_percent` (int, 0–100), `description`, `is_active` (bool). One
+  product may have multiple promotions.
 
 ## Business rules to preserve
 
@@ -119,10 +123,26 @@ and delivery, order/tracking communication, marketing with explicit consent,
 and legal/fiscal obligations. Do not share customer data with third parties for
 marketing. Customers may request deletion through the store's service channels.
 
+## CSV import
+
+Operational data is loaded from six CSVs through `import-csv <directory>`:
+
+- `categories.csv`, `products.csv`, `customers.csv`, `orders.csv`,
+  `order_items.csv`, `promotions.csv`.
+- Headers match the model columns; `specs` is a JSON object, dates are
+  ISO-8601, booleans accept `true/false` or `0/1`, and audit columns are
+  optional.
+- The importer runs outside API startup, in one transaction, upserts by primary
+  key, and resets the integer sequences after loading explicit IDs.
+- CSVs are not versioned in this repository; `data/` is ignored. Use
+  `--truncate` to replace all existing rows.
+
 ## Implementation status
 
-- Business entities, repositories, use cases, AI/provider integration and
-  authentication do not exist yet.
-- The only implemented module is `health`, used as the architecture reference.
-- The next modules should follow `.agents/project-context/architecture.md` and
-  the `new-module` skill.
+- Implemented: ORM models, Alembic initial migration, repositories with CRUD,
+  `list`/`get` use cases, GET routes with pagination/filters, shared error
+  handling and the CSV importer.
+- Not implemented: POST/PUT/PATCH/DELETE routes, authentication/authorization,
+  AI/provider integration, and the agent runtime.
+- The `health` module remains the smallest structural reference; the business
+  modules show the full CRUD/pagination pattern.

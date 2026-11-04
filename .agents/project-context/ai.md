@@ -4,14 +4,14 @@
 
 - `pyproject.toml` — no LLM/RAG/provider dependency is declared as of this
   profile; keywords/description identify the project as an AI agent.
-- `src/customer_support_agent/core/config.py` — no model/provider/API-key
+- `src/app/core/config.py` — no model/provider/API-key
   settings exist.
-- `src/customer_support_agent/db/metadata.py` and `alembic/versions/` — no
-  business schema/models are implemented yet.
+- `src/app/db/metadata.py` and `alembic/versions/` — the
+  six business tables are implemented; no AI-specific schema exists.
 - `.agents/project-context/architecture.md` — layering, configuration and error
   exposure rules that will apply to the future integration.
 - `.agents/project-context/domain.md` — versioned product scope, store rules and
-  planned data model the agent must ground its answers on.
+  data model the agent must ground its answers on.
 
 ## Scope
 
@@ -20,9 +20,10 @@
   records the intended boundary and the project contracts that must apply once
   it is added; it is not evidence that an integration is implemented.
 - Relevant paths:
-  - `src/customer_support_agent/modules/` — future agent/business modules using
-    the four-layer structure.
-  - `src/customer_support_agent/core/config.py` — provider, model, timeout and
+  - `src/app/modules/` — existing business modules
+    (`categories`, `products`, `customers`, `orders`, `promotions`) and the
+    future agent module, all using the four-layer structure.
+  - `src/app/core/config.py` — provider, model, timeout and
     credential settings must be added here.
   - `.agents/project-context/domain.md` — store rules, operational data model
     and out-of-scope behavior for retrieval/tooling.

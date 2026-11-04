@@ -6,17 +6,18 @@ must state why it is expected and the evidence source.
 - **Four-layer module directories** — every business module is split into
   `domain`, `application`, `infrastructure`, and `presentation` so dependency
   direction stays explicit and the module is testable without a database.
-  Evidence: `src/customer_support_agent/modules/health/` and
+  Evidence: `src/app/modules/health/` and
   `.agents/project-context/architecture.md`.
-- **`Protocol` ports instead of concrete repository types** — use cases depend
-  on structural interfaces, enabling fakes and keeping `application` free of
-  SQLAlchemy. Evidence: `modules/health/application/ports.py`,
+- **`Protocol` interfaces instead of concrete repository types** — use cases
+  depend on structural interfaces, enabling fakes and keeping `application`
+  free of SQLAlchemy. Evidence:
+  `modules/health/application/interfaces.py`,
   `modules/health/application/check_database_health.py`.
 - **Repository-owned transactions on every public method** — `session.begin()`
   in reads and writes returns the connection to the pool and centralizes
   commit/rollback; it is not an oversight that reads open a transaction.
   Evidence: `db/session.py`,
-  `modules/health/infrastructure/persistence/repository.py`.
+  `modules/health/infrastructure/repository.py`.
 - **Composition root in `presentation/dependencies.py`** — this is the only
   presentation file allowed to import `infrastructure`; other presentation
   files import only `application`. Evidence:
@@ -30,9 +31,10 @@ must state why it is expected and the evidence source.
   application results instead of leaking framework objects. Evidence:
   `modules/health/application/check_database_health.py`
   (`DatabaseHealthResult`).
-- **Health module as the reference** — it is intentionally small and
-  demonstrates the intended structure for future modules. Evidence:
-  `src/customer_support_agent/modules/health/` and the project README.
+- **Health module as the smallest reference** — it demonstrates the minimal
+  structure; `categories`, `products`, `customers`, `orders` and `promotions`
+  show the full CRUD/pagination pattern. Evidence:
+  `src/app/modules/` and the project README.
 - **Development-only error detail** — `/health/db` exposes a `detail` field only
   when `APP_ENV=development`; `hml`/`prod` omit it. Evidence:
   `modules/health/presentation/router.py`, `core/config.py`.
@@ -43,7 +45,7 @@ must state why it is expected and the evidence source.
   conversion belongs to presentation/formatting only. Evidence: `compose.yaml`
   (`TZ: UTC`) and `README.md` (architecture decisions).
 - **`logging`, never `print`** — server-side diagnostics use module loggers.
-  Evidence: `app.py`, `db/session.py`,
+  Evidence: `main.py`, `db/session.py`,
   `modules/health/...`.
 - **Tests override FastAPI dependencies** — contract tests replace providers via
   `app.dependency_overrides` and use realistic fakes rather than hitting the
@@ -54,15 +56,47 @@ must state why it is expected and the evidence source.
 - **Migrations are explicit and immutable** — no startup migration, no editing
   applied revisions; a schema change is a new reviewed migration. Evidence:
   `README.md` (Migrations), `alembic/env.py`, and the absence of migration
-  calls in `src/customer_support_agent/app.py`.
+  calls in `src/app/main.py`.
 - **`db/metadata.py` is the only `db` file importing module models** — it is the
   metadata composition root for Alembic autogenerate. Evidence:
-  `src/customer_support_agent/db/metadata.py`.
+  `src/app/db/metadata.py`.
+- **Integer identity primary keys** — every root table has an `Identity()` PK
+  named after the entity (`category_id`, `product_id`, etc.); `order_items`
+  uses the composite key `(order_id, product_id)`. This matches the source data
+  and keeps foreign keys explicit. Evidence: module persistence models and the
+  initial migration.
+- **`TimestampMixin` on every model** — `created_at`/`updated_at` are
+  timezone-aware and database-defaulted; importer updates preserve
+  `created_at`. Evidence: `db/base.py`, module models.
+- **Native Postgres enums backed by `StrEnum`** — `product_status`,
+  `order_status` and `payment_method` are real database types, and
+  `values_callable` stores the member values. Evidence: module models and the
+  initial migration.
+- **`Numeric` + `Decimal` internally, `float` at the API boundary** — money never
+  uses binary floats in the domain or database. Evidence: `ProductModel`,
+  `OrderModel`, `ProductResponse`, `OrderSummaryResponse`.
+- **Module-specific exceptions under `core.exceptions`** — use cases raise
+  `NotFoundError` subclasses with a stable `code`; a single handler in
+  `presentation/exception_handlers.py` renders `{code, message}`. Evidence:
+  `core/exceptions.py`, `presentation/exception_handlers.py`,
+  `modules/*/application/exceptions.py`.
+- **Paginated list envelope** — every list route uses `PaginationParams` and
+  `Page[T]` with `items`, `total`, `page`, `page_size`; repositories return
+  `(items, total)`. Evidence: `presentation/pagination.py`, module routers.
+- **Orders are one aggregate** — `OrderItem` is loaded and updated through the
+  order repository; item writes are never coordinated by a use case. Evidence:
+  `modules/orders/infrastructure/repository.py`.
+- **Bulk data enters through the CSV importer** — `import-csv` is the only
+  supported bulk path, runs outside startup and uses one transaction. Evidence:
+  `infrastructure/importing/csv_importer.py`, `cli/import_csv.py`.
+- **GET-only public API for now** — business modules expose list/detail routes;
+  POST/PUT/PATCH/DELETE use cases do not exist yet even though repositories
+  support CRUD. Evidence: module routers and use-case modules.
 
 ## Not yet conventions
 
 The following are open decisions and must not be treated as established rules:
-default primary-key strategy, timestamp mixin, error catalog/format,
-pagination/filters, authentication/authorization, and lint/format/type-check/CI
-tooling. Evidence: no such abstraction or dependency exists in `db/base.py`,
-`pyproject.toml`, or `src/customer_support_agent/`.
+authentication/authorization, write endpoints, the full error catalog beyond
+404/409/400, and lint/format/type-check/CI tooling. Evidence: no auth
+dependency is declared in `pyproject.toml`, routers only declare GET routes, and
+no lint/CI configuration exists.

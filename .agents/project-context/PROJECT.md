@@ -4,16 +4,16 @@
 
 - Committed project context: `.agents/project-context/architecture.md`
   (canonical layer/persistence contract), `domain.md` (business scope and
-  planned data model), `conventions.md`, `delivery-contracts.md`,
+  data model), `conventions.md`, `delivery-contracts.md`,
   `validation.md`, and `ai.md`.
 - Repository documentation: `README.md` (setup, endpoints, decisions).
 - Tooling/dependencies: `pyproject.toml`, `uv.lock`, `Dockerfile`, `compose.yaml`,
   `compose.override.yaml`, `compose.prod.yaml`, `alembic.ini`, `alembic/env.py`,
   `.env.example`, `deploy/.env.hml`, `deploy/.env.prod`.
 - Established implementation examples:
-  `src/customer_support_agent/modules/health/` (reference Clean Architecture
-  module), `src/customer_support_agent/core/config.py`,
-  `src/customer_support_agent/db/` (base, metadata, session),
+  `src/app/modules/health/` (reference Clean Architecture
+  module), `src/app/core/config.py`,
+  `src/app/db/` (base, metadata, session),
   `tests/health/`, `tests/integration/test_database.py`.
 
 ## Project map
@@ -22,27 +22,32 @@
   `uv` for environment and lockfile; Uvicorn in production; Docker Compose for
   local/dev/hml/prod (`pyproject.toml`, `Dockerfile`, `compose*.yaml`).
 - Persistence/state: Postgres 17.11; SQLAlchemy 2.x async with `asyncpg`;
-  one `AsyncSession` per request; repositories own transactions; Alembic async
-  migrations with the same `Settings` as the application
-  (`src/customer_support_agent/db/session.py`, `alembic/env.py`,
-  `src/customer_support_agent/modules/health/infrastructure/persistence/repository.py`).
+  one `AsyncSession` per request; repositories own transactions; integer
+  `Identity` PKs, `TimestampMixin`, native Postgres enums and `Numeric(12,2)`
+  money; Alembic async migrations with the same `Settings` as the application
+  (`src/app/db/`, `alembic/env.py`).
 - Configuration: `pydantic-settings` `Settings` in
-  `src/customer_support_agent/core/config.py`; environment variables are the
+  `src/app/core/config.py`; environment variables are the
   source of truth, `.env` is local convenience only.
 - Main code areas:
-  - `src/customer_support_agent/app.py` — FastAPI app, lifespan, router
+  - `src/app/main.py` — FastAPI app, lifespan, router
     registration.
-  - `src/customer_support_agent/core/` — application settings.
-  - `src/customer_support_agent/db/` — declarative base, Alembic metadata,
-    engine/session factory/startup probe.
-  - `src/customer_support_agent/modules/<module>/` — `domain`,
+  - `src/app/core/` — application settings and shared
+    exception base (`exceptions.py`).
+  - `src/app/db/` — declarative base, timestamp mixin,
+    Alembic metadata, engine/session factory/startup probe.
+  - `src/app/presentation/` — global error handler and
+    pagination envelope.
+  - `src/app/modules/<module>/` — `domain`,
     `application`, `infrastructure`, `presentation`.
+  - `src/app/infrastructure/importing/` and `cli/` — CSV
+    importer and `import-csv` command.
   - `tests/` — unit/contract tests plus opt-in integration tests.
-  - `alembic/versions/` — migration scripts.
-- Domain data: the business scope, store rules and planned data model are
-  summarized in `.agents/project-context/domain.md`. They are not implemented
-  as entities/models yet (`src/customer_support_agent/db/metadata.py` imports no
-  module models and `alembic/versions/` has no migration).
+  - `alembic/versions/` — migration scripts (initial migration included).
+- Domain data: the business scope, store rules and data model are summarized in
+  `.agents/project-context/domain.md`. The six tables and the
+  `categories/products/customers/orders/promotions` modules are implemented with
+  GET-only routes; write routes and the AI agent are not implemented yet.
 - AI integration: planned by the product scope in
   `.agents/project-context/domain.md` but not implemented; no LLM/RAG provider
   dependency or provider configuration exists in `pyproject.toml` or
@@ -61,7 +66,7 @@
   boundaries, or omit if the change has no AI/external-integration surface.
 - Read `.agents/project-context/domain.md` when: modeling business entities,
   implementing use cases, writing prompts/tools that depend on store rules, or
-  changing the planned data model.
+  changing the data model.
 - Always read `.agents/project-context/conventions.md` before reporting a
   project-specific finding.
 - Read `.agents/project-context/validation.md` for the verified commands and
