@@ -28,7 +28,13 @@
   and are included in `main.py`. Current routes: `GET /` (API name/version/status),
   `GET /health` (liveness), `GET /health/db` (database readiness), plus
   `GET /categories`, `/products`, `/customers`, `/orders`, `/promotions` with
-  `/{id}` detail routes. Business routes are GET-only for now.
+  `/{id}` detail routes, plus the `/documents` ingestion surface:
+  `POST /documents`, `GET /documents`, `GET /documents/{public_id}`,
+  `GET /documents/{public_id}/sections`,
+  `GET /documents/{public_id}/chunks`, `PATCH /documents/{public_id}`,
+  `DELETE /documents/{public_id}`, `POST /documents/{public_id}/restore` and
+  `POST /documents/{public_id}/reprocess`. Business routes other than document
+  ingestion remain GET-only.
 - Authentication, authorization, and ownership gates: none implemented.
   Do not assume an auth layer exists; introducing authentication is an open
   decision (no auth dependency is declared in `pyproject.toml` and no auth
@@ -43,8 +49,9 @@
     logged server-side.
   - Business failures are signaled by the use case and translated to HTTP in
     presentation; use cases must not import `HTTPException`. The shared handler
-    returns `{code, message}` with 404 for `NotFoundError`, 409 for
-    `ConflictError` and 400 for other `AppError` subclasses.
+    returns `{code, message}` using `AppError.status_code`: 404 for
+    `NotFoundError`, 409 for `ConflictError`, 413/415/422/503 for document
+    ingestion errors and 400 for other `AppError` subclasses.
   - Every list route uses `page`/`page_size` (default 20, max 100) and returns
     `{items, total, page, page_size}`. Detail routes return the entity schema;
     `GET /orders/{order_id}` additionally includes `items`.
@@ -62,6 +69,9 @@
   `DATABASE_URL` is an optional full override for managed Postgres. `POSTGRES_HOST`
   is `localhost` in the local `.env` and Compose overrides it to `db` inside
   containers.
+- Document ingestion configuration: `DOCUMENTS_*` for limits/chunking/OCR,
+  `MINIO_*`, `RABBITMQ_*`/`CELERY_*`, `JINA_*` and `DEEPSEEK_*`. Jina/DeepSeek
+  keys are `SecretStr` and must be present only in the runtime environment.
 - Secret handling: `.env` is not versioned; `deploy/.env.hml` and
   `deploy/.env.prod` contain fictitious values only. Real credentials must come
   from a secret manager/CI environment, never Git or the image.
@@ -75,8 +85,15 @@
   - Bulk data is loaded with `import-csv <directory>` (or
     `docker compose exec api import-csv <directory>`), never at startup. `data/`
     is ignored by Git; the importer upserts by primary key and resets sequences.
+  - Compose adds `rabbitmq`, `minio`, `minio-init` and `worker`. The worker
+    uses the separate `worker-runtime`/`worker-dev` image targets, runs
+    `--concurrency=1`, and scales independently from the API.
+  - `db` uses `pgvector/pgvector:pg17`; the migration enables `vector` and
+    `ltree`.
   - The production image runs as a non-root user; `deploy/` and `.env*` are
     excluded from the Docker context.
+  - Document write routes have no authentication yet; restrict network exposure
+    until the auth layer is implemented.
 
 ## Compatibility review
 
