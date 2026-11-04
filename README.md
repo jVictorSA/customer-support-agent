@@ -210,8 +210,10 @@ Postgres gerenciado, caso necessário.
 │   └── .env.prod
 ├── docker/
 │   └── postgres/init/        # criação do banco de testes
-├── docs/
-│   └── dev-docs/             # documentação de referência do domínio
+├── .agents/
+│   ├── project-context/      # perfil do projeto para agentes
+│   ├── rules/                # regras sempre carregadas
+│   └── skills/               # fluxos reutilizáveis
 ├── src/
 │   └── customer_support_agent/
 │       ├── app.py            # aplicação FastAPI e lifespan
@@ -230,6 +232,8 @@ Postgres gerenciado, caso necessário.
 ├── tests/
 │   ├── health/
 │   └── integration/
+├── AGENTS.md
+├── opencode.json
 ├── alembic.ini
 ├── compose.yaml
 ├── compose.override.yaml
@@ -238,6 +242,31 @@ Postgres gerenciado, caso necessário.
 ├── pyproject.toml
 └── uv.lock
 ```
+
+## Codificação com agentes de IA
+
+O desenvolvimento deste repositório usa o [OpenCode](https://opencode.ai/) como
+assistente de código. A configuração é versionada para que o mesmo contexto
+valha para qualquer pessoa ou ferramenta que trabalhe no projeto:
+
+- `AGENTS.md`: instruções permanentes, comandos, convenções e definição de
+  pronto.
+- `.agents/rules/`: regras sempre carregadas sobre fronteiras de arquitetura,
+  persistência/migrations, integrações de IA e validação.
+- `.agents/project-context/`: perfil versionado do projeto, derivado do código,
+  do README e do escopo de negócio registrado em `domain.md`. `PROJECT.md`
+  funciona como mapa de leitura dos demais arquivos.
+- `.agents/skills/`: fluxos reutilizáveis para configurar/atualizar o contexto
+  (`project-context-setup`), criar módulos de negócio (`new-module`), criar e
+  revisar migrations (`db-migration`), revisar o staged antes do commit
+  (`pre-commit-review`) e gerar descrições de PR (`pr-description`).
+
+O fluxo usado é: carregar o contexto e as regras antes de implementar; usar as
+skills para scaffolding e migrations; rodar `uv run pytest`; revisar o staged
+com `pre-commit-review`; e registrar decisões de arquitetura em
+`.agents/project-context/architecture.md`.
+Nenhuma ferramenta de IA roda em produção — o agente de atendimento ao cliente é
+o produto, não o assistente de codificação.
 
 ## Decisões de arquitetura
 
