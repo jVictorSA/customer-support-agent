@@ -11,6 +11,7 @@ class AppError(Exception):
 
     code: str = "application_error"
     message: str = "Application error"
+    status_code: int = 400
 
     def __init__(self, message: str | None = None) -> None:
         self.message = message or self.message
@@ -22,6 +23,7 @@ class NotFoundError(AppError):
 
     code = "not_found"
     message = "Resource not found"
+    status_code = 404
 
 
 class ConflictError(AppError):
@@ -29,3 +31,4 @@ class ConflictError(AppError):
 
     code = "conflict"
     message = "Resource conflict"
+    status_code = 409

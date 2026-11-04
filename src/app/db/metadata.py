@@ -11,6 +11,11 @@ from app.modules.categories.infrastructure.models import (
 from app.modules.customers.infrastructure.models import (
     CustomerModel,
 )
+from app.modules.documents.infrastructure.models import (
+    DocumentChunkModel,
+    DocumentModel,
+    DocumentSectionModel,
+)
 from app.modules.orders.infrastructure.models import (
     OrderItemModel,
     OrderModel,
@@ -26,6 +31,9 @@ __all__ = [
     "Base",
     "CategoryModel",
     "CustomerModel",
+    "DocumentChunkModel",
+    "DocumentModel",
+    "DocumentSectionModel",
     "OrderItemModel",
     "OrderModel",
     "ProductModel",
