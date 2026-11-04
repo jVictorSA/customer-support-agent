@@ -225,3 +225,6 @@ __marimo__/
 
 # docs
 /docs/dev-docs
+
+# Local data files
+/data

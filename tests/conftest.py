@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 os.environ.setdefault("APP_ENV", "development")
 os.environ["DB_STARTUP_CHECK_ENABLED"] = "false"
 
-from customer_support_agent.app import app  # noqa: E402
+from app.main import app  # noqa: E402
 
 
 @pytest.fixture

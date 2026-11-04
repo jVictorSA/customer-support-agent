@@ -2,9 +2,9 @@ import os
 
 import pytest
 
-from customer_support_agent.core.config import get_settings
-from customer_support_agent.db.session import get_engine, get_session_factory
-from customer_support_agent.modules.health.infrastructure.persistence.repository import (
+from app.core.config import get_settings
+from app.db.session import get_engine, get_session_factory
+from app.modules.health.infrastructure.repository import (
     SqlAlchemyHealthRepository,
 )
 
@@ -17,11 +17,11 @@ pytestmark = [
 ]
 
 
-async def test_can_connect_to_postgres(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(
-        "POSTGRES_DB",
-        os.getenv("POSTGRES_TEST_DB", "customer_support_agent_test"),
-    )
+async def test_can_connect_to_postgres(
+    monkeypatch: pytest.MonkeyPatch,
+    test_database_name: str,
+) -> None:
+    monkeypatch.setenv("POSTGRES_DB", test_database_name)
 
     get_settings.cache_clear()
     get_engine.cache_clear()
