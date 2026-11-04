@@ -3,13 +3,13 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
-from customer_support_agent.app import app
-from customer_support_agent.core.config import Settings, get_settings
-from customer_support_agent.modules.health.application.check_database_health import (
+from app.main import app
+from app.core.config import Settings, get_settings
+from app.modules.health.application.check_database_health import (
     CheckDatabaseHealthUseCase,
     DatabaseHealthResult,
 )
-from customer_support_agent.modules.health.presentation.dependencies import (
+from app.modules.health.presentation.dependencies import (
     get_check_database_health_use_case,
 )
 
