@@ -1,0 +1,24 @@
+services:
+  db:
+    env_file:
+      - .env
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+
+  api:
+    build:
+      target: dev
+    env_file:
+      - .env
+    command:
+      - fastapi
+      - dev
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    volumes:
+      - .:/app
+      - /app/.venv
