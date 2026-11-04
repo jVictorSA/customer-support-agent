@@ -1,0 +1,49 @@
+[project]
+name = "customer-support-agent"
+version = "0.1.0"
+description = "API de agente de atendimento ao cliente para uma loja de instrumentos musicais."
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+    { name = "João Victor Araujo" },
+]
+keywords = [
+    "ai-agent",
+    "customer-service",
+    "customer-support",
+    "fastapi",
+    "llm",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "fastapi[standard]>=0.162.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.urls]
+Repository = "https://github.com/jVictorSA/customer-support-agent"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=8.4.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.6,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.fastapi]
+entrypoint = "customer_support_agent.app:app"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
