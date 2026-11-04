@@ -96,8 +96,9 @@ uv run fastapi dev
 ## Migrations
 
 O Alembic está configurado para usar a mesma `Settings` da aplicação, com engine
-async. Ainda não existe migration inicial: a primeira será criada junto da
-primeira entidade.
+async. A migration inicial cria as tabelas `categories`, `products`,
+`customers`, `orders`, `order_items` e `promotions`, com enums nativos do
+Postgres, índices, checks e colunas de auditoria.
 
 Comandos canônicos, executados dentro do container da API:
 
@@ -163,7 +164,9 @@ uv run pytest -m integration
 ```
 
 O banco `customer_support_agent_test` é criado automaticamente pelo script em
-`docker/postgres/init/` na primeira inicialização do volume.
+`docker/postgres/init/` na primeira inicialização do volume. O fixture de
+integração aplica `alembic upgrade head` nesse banco automaticamente antes dos
+testes; não é preciso migrar manualmente.
 
 ## Endpoints
 
@@ -172,6 +175,39 @@ O banco `customer_support_agent_test` é criado automaticamente pelo script em
 | `GET` | `/` | Nome, versão e status da API |
 | `GET` | `/health` | Liveness da API |
 | `GET` | `/health/db` | Readiness do banco (`SELECT 1`) |
+| `GET` | `/categories` | Lista paginada de categorias |
+| `GET` | `/categories/{category_id}` | Detalhe da categoria |
+| `GET` | `/products` | Lista paginada; filtros `category_id`, `status`, `name`, `max_price` |
+| `GET` | `/products/{product_id}` | Detalhe do produto |
+| `GET` | `/customers` | Lista paginada; filtros `city`, `name` |
+| `GET` | `/customers/{customer_id}` | Detalhe do cliente |
+| `GET` | `/orders` | Lista paginada; filtros `customer_id`, `status` |
+| `GET` | `/orders/{order_id}` | Detalhe do pedido com itens |
+| `GET` | `/promotions` | Lista paginada; filtros `product_id`, `is_active` |
+| `GET` | `/promotions/{promotion_id}` | Detalhe da promoção |
+
+### Paginação e erros
+
+As listas usam `page` (padrão `1`) e `page_size` (padrão `20`, máximo `100`) e
+retornam:
+
+```json
+{
+  "items": [],
+  "total": 0,
+  "page": 1,
+  "page_size": 20
+}
+```
+
+Recursos inexistentes retornam o status adequado e um corpo estável:
+
+```json
+{
+  "code": "product_not_found",
+  "message": "Product 999 not found"
+}
+```
 
 ### `GET /health/db`
 
@@ -238,22 +274,34 @@ Postgres gerenciado, caso necessário.
 │   ├── rules/                # regras sempre carregadas
 │   └── skills/               # fluxos reutilizáveis
 ├── src/
-│   └── customer_support_agent/
-│       ├── app.py            # aplicação FastAPI e lifespan
+│   └── app/
+│       ├── main.py           # aplicação FastAPI e lifespan
 │       ├── core/
-│       │   └── config.py     # Settings da aplicação
+│       │   ├── config.py     # Settings da aplicação
+│       │   └── exceptions.py # AppError e bases de erro
 │       ├── db/
 │       │   ├── base.py       # Base declarativa + naming convention
 │       │   ├── metadata.py   # metadata para o Alembic
 │       │   └── session.py    # engine, session factory e startup probe
+│       ├── presentation/
+│       │   ├── exception_handlers.py  # handler global de erros
+│       │   └── pagination.py          # Page[T] e parâmetros de paginação
+│       ├── infrastructure/importing/  # importador CSV
+│       ├── cli/import_csv.py          # comando import-csv
 │       └── modules/
-│           └── health/
-│               ├── domain/
-│               ├── application/
-│               ├── infrastructure/
-│               └── presentation/
+│           ├── health/
+│           ├── categories/
+│           ├── products/
+│           ├── customers/
+│           ├── orders/
+│           └── promotions/
 ├── tests/
-│   ├── health/
+│   ├── categories/
+│   ├── products/
+│   ├── customers/
+│   ├── orders/
+│   ├── promotions/
+│   ├── importing/
 │   └── integration/
 ├── AGENTS.md
 ├── opencode.json
@@ -308,7 +356,16 @@ o produto, não o assistente de codificação.
 - **Base declarativa com naming convention** para nomes previsíveis de
   constraints e índices.
 - **Módulos em Clean Architecture**: `domain`, `application`, `infrastructure`
-  e `presentation`. O módulo `health` serve de referência para os próximos.
+  e `presentation`. O módulo `health` é a menor referência; os módulos de
+  negócio mostram o padrão completo.
+- **PKs inteiras com `Identity` e `TimestampMixin`** em todas as tabelas;
+  `order_items` usa PK composta e pertence ao agregado `orders`.
+- **Dinheiro em `Numeric(12,2)` + `Decimal`**, com `float` apenas na resposta
+  JSON; enums de status/pagamento são tipos nativos do Postgres.
+- **Listas paginadas** com `page`/`page_size` e envelope `items/total/page/
+  page_size`; erros de aplicação retornam `{code, message}`.
+- **Importação CSV idempotente** via `import-csv`, em uma transação, com upsert
+  por PK e reset de sequences; nunca roda no startup.
 - **Startup com retries limitados e modo degradado**: se o banco não responder,
   a API sobe, loga o problema e `/health/db` retorna 503.
 - **UTC** no banco e na aplicação. A conversão para `America/Sao_Paulo` deve
