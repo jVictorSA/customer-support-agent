@@ -47,6 +47,7 @@ docker compose logs -f api
 # API: http://127.0.0.1:8000, docs: http://127.0.0.1:8000/docs
 
 # Integration tests (dedicated test DB, opt-in)
+# The fixture applies `alembic upgrade head` to the test DB automatically.
 docker compose up -d db
 RUN_INTEGRATION_TESTS=1 POSTGRES_DB=customer_support_agent_test \
   uv run pytest -m integration
@@ -56,6 +57,9 @@ docker compose exec api alembic current
 docker compose exec api alembic revision --autogenerate -m "create products"
 docker compose exec api alembic upgrade head
 docker compose exec api alembic downgrade -1
+
+# Bulk CSV import (after migrations; data/ is ignored by Git)
+uv run import-csv data/ --truncate
 ```
 
 There is no lint, formatter, type checker, or CI configured. Do not claim they

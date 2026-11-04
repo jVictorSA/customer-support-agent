@@ -116,11 +116,34 @@ docker compose exec api alembic downgrade -1
 ```
 
 Os models ORM de cada módulo devem ser importados em
-`src/customer_support_agent/db/metadata.py` para que o `--autogenerate` os
+`src/app/db/metadata.py` para que o `--autogenerate` os
 encontre.
 
 As migrations não rodam automaticamente no startup da API. Isso evita corrida
 entre réplicas e mantém o deploy explícito.
+
+## Importação de dados
+
+Os dados operacionais podem ser carregados por CSVs, sem endpoint de upload e
+sem rodar no startup. O comando aceita um diretório com seis arquivos:
+`categories.csv`, `products.csv`, `customers.csv`, `orders.csv`,
+`order_items.csv` e `promotions.csv`.
+
+```bash
+# aplicar a migration antes da primeira carga
+docker compose exec api alembic upgrade head
+
+# importar/atualizar (idempotente, upsert por PK)
+uv run import-csv data/
+
+# recarregar do zero
+uv run import-csv data/ --truncate
+```
+
+Os cabeçalhos devem corresponder às colunas do modelo. `specs` é um objeto JSON,
+datas usam ISO-8601 e booleanos aceitam `true/false` ou `0/1`. Os CSVs não são
+versionados; `data/` está no `.gitignore`. A importação inteira roda em uma
+transação e ajusta as sequences após inserir IDs explícitos.
 
 ## Testes
 
