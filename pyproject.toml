@@ -36,6 +36,9 @@ dependencies = [
 [project.urls]
 Repository = "https://github.com/jVictorSA/customer-support-agent"
 
+[project.scripts]
+import-csv = "app.cli.import_csv:main"
+
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
@@ -47,8 +50,11 @@ dev = [
 requires = ["uv_build>=0.13.6,<0.14.0"]
 build-backend = "uv_build"
 
+[tool.uv.build-backend]
+module-name = "app"
+
 [tool.fastapi]
-entrypoint = "customer_support_agent.app:app"
+entrypoint = "app.main:app"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

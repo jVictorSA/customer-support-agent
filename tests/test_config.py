@@ -1,4 +1,4 @@
-from customer_support_agent.core.config import Settings
+from app.core.config import Settings
 
 
 def test_builds_database_url_from_postgres_variables() -> None:

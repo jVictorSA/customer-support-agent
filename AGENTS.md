@@ -67,7 +67,7 @@ separately.
 - Code identifiers, docstrings, and comments in English. README and project
   docs in Portuguese. API payloads and messages in English.
 - Type every public function. Prefer `collections.abc` types and absolute
-  imports from `customer_support_agent`. No wildcard imports.
+  imports from `app`. No wildcard imports.
 - Use `logging.getLogger(__name__)`, never `print`.
 - Configure through `Settings`/environment variables; never hardcode hosts,
   ports, credentials, URLs, model names, or API keys.
@@ -95,7 +95,7 @@ separately.
 
 - Behavior is covered by tests and `uv run pytest` passes.
 - Integration tests were run for repository/query/migration changes.
-- New endpoints are registered in `app.py`; new models are registered in
+- New endpoints are registered in `src/app/main.py`; new models are registered in
   `db/metadata.py`; new settings are documented in `.env.example` and both
   deploy env files.
 - `README.md` and the affected `.agents/project-context/` document are updated
