@@ -18,9 +18,9 @@
 uv run pytest
 ```
 
-Verified on 2026-11-04: `36 passed, 3 skipped` (the skipped tests are the
-opt-in Postgres integration tests). This is the only automated quality gate
-currently configured.
+Verified on 2026-11-04 after document ingestion: `53 passed, 5 skipped`
+(the skipped tests are the opt-in Postgres integration tests). This is the only
+automated quality gate currently configured.
 
 ## Targeted checks
 
@@ -44,6 +44,12 @@ currently configured.
   is created by `docker/postgres/init/01-create-test-db.sh` on first volume
   initialization, and the integration fixture applies `alembic upgrade head` to
   it automatically when `RUN_INTEGRATION_TESTS=1`.
+- Document ingestion change: run `uv run pytest`; the unit/contract suite uses
+  fakes and must not call Docling/Jina/DeepSeek/MinIO/RabbitMQ. For repository,
+  migration, pgvector, ltree or FTS changes run the opt-in integration command
+  above. Building the worker image or exercising Docling requires the `worker`
+  dependency group (`uv sync --group worker`) and is not part of the default
+  gate.
 - CSV import change: run the parser unit tests and, when the database is
   available, the opt-in importer integration test. The command itself is:
 
@@ -86,6 +92,12 @@ currently configured.
 - Unit tests use FastAPI `TestClient` and dependency overrides; no external
   service or LLM provider test harness exists.
 - Python 3.12 is required; `uv` manages the environment and lockfile.
+- The worker image installs Docling, PyTorch CPU, PyMuPDF and Tesseract from the
+  `worker` dependency group; validate it with
+  `docker compose build worker` before deploying. This heavy build is not part
+  of the default unit-test gate.
+- The default suite does not call MinIO, RabbitMQ, Jina or DeepSeek. End-to-end
+  ingestion requires those services and real provider keys.
 
 ## Pre-commit handoff
 

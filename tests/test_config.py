@@ -24,6 +24,26 @@ def test_builds_database_url_from_postgres_variables() -> None:
     )
 
 
+def test_empty_provider_keys_become_none() -> None:
+    settings = Settings(jina_api_key="", deepseek_api_key="")
+
+    assert settings.jina_api_key is None
+    assert settings.deepseek_api_key is None
+
+
+def test_builds_rabbitmq_url_and_honors_override() -> None:
+    settings = Settings(
+        rabbitmq_user="user",
+        rabbitmq_password="p@ss",
+        rabbitmq_host="rabbit",
+        rabbitmq_port=5673,
+    )
+    override = Settings(celery_broker_url="amqp://managed:5672//")
+
+    assert settings.rabbitmq_url == "amqp://user:p%40ss@rabbit:5673//"
+    assert override.rabbitmq_url == "amqp://managed:5672//"
+
+
 def test_explicit_database_url_overrides_components() -> None:
     settings = Settings(
         postgres_user="ignored",

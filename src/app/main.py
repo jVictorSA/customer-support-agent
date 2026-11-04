@@ -12,6 +12,9 @@ from app.modules.categories.presentation.router import (
 from app.modules.customers.presentation.router import (
     router as customers_router,
 )
+from app.modules.documents.presentation.router import (
+    router as documents_router,
+)
 from app.modules.health.presentation.router import (
     router as health_router,
 )
@@ -63,6 +66,7 @@ app = FastAPI(
 register_exception_handlers(app)
 
 app.include_router(health_router)
+app.include_router(documents_router)
 app.include_router(categories_router)
 app.include_router(products_router)
 app.include_router(customers_router)

@@ -2,21 +2,26 @@
 
 API de agente de atendimento ao cliente para uma loja de instrumentos musicais.
 
-O projeto está em desenvolvimento. Nesta etapa, a base de persistência está
-configurada: a API conecta em um Postgres 17.11 via SQLAlchemy async, as
-migrations são gerenciadas pelo Alembic e o endpoint `/health/db` verifica a
-conexão com o banco.
+O projeto está em desenvolvimento. A API conecta em um Postgres 17 com
+`pgvector`/`ltree` via SQLAlchemy async, as migrations são gerenciadas pelo
+Alembic, o endpoint `/health/db` verifica a conexão e o módulo de documentos
+já implementa a ingestão de PDFs com armazenamento, processamento assíncrono e
+embeddings.
 
 ## Stack
 
 - [Python 3.12+](https://www.python.org/)
 - [FastAPI](https://fastapi.tiangolo.com/)
-- [Postgres 17.11](https://www.postgresql.org/)
+- [Postgres 17 + pgvector + ltree](https://www.postgresql.org/)
 - [SQLAlchemy 2.x async + asyncpg](https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html)
 - [Alembic](https://alembic.sqlalchemy.org/)
 - [pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/)
+- [MinIO](https://min.io/) para armazenamento dos PDFs e checkpoints
+- [RabbitMQ](https://www.rabbitmq.com/) + [Celery](https://docs.celeryq.dev/) para processamento assíncrono
+- [Docling](https://docling-project.github.io/docling/) para extração estrutural de PDF
+- [Jina AI](https://jina.ai/embeddings/) para embeddings e [DeepSeek](https://api-docs.deepseek.com/) para resumos de seção
 - [uv](https://docs.astral.sh/uv/) para gerenciamento do ambiente e dependências
-- [Docker Compose](https://docs.docker.com/compose/) para Postgres e API
+- [Docker Compose](https://docs.docker.com/compose/) para Postgres, MinIO, RabbitMQ, API e worker
 - [pytest](https://docs.pytest.org/) + [pytest-asyncio](https://pytest-asyncio.readthedocs.io/) para testes
 
 ## Requisitos
@@ -54,6 +59,20 @@ As principais variáveis são:
 | `DB_STARTUP_MAX_RETRIES` | Tentativas no startup | `10` |
 | `DB_STARTUP_RETRY_DELAY` | Intervalo entre tentativas (segundos) | `1.0` |
 | `DATABASE_URL` | URL completa opcional; sobrescreve as variáveis `POSTGRES_*` | vazio |
+| `DOCUMENTS_MAX_UPLOAD_MB` | Tamanho máximo do PDF enviado | `50` |
+| `DOCUMENTS_MAX_PAGES` | Número máximo de páginas | `500` |
+| `DOCUMENTS_STORAGE_BUCKET` | Bucket do MinIO | `rag-documents` |
+| `DOCUMENTS_OCR_ENABLED` | Liga o OCR do Docling (Tesseract) | `false` |
+| `DOCUMENTS_CHUNK_*` | Alvo, máximo, mínimo e overlap de tokens | `800/1000/150/60` |
+| `MINIO_ENDPOINT` | Endpoint S3 do MinIO | `localhost:9000` |
+| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | Credenciais do MinIO | `minioadmin` |
+| `RABBITMQ_*` | Credenciais/host/porta do RabbitMQ | `app/app/localhost/5672` |
+| `CELERY_BROKER_URL` | URL AMQP completa opcional | vazio |
+| `JINA_API_KEY` | Chave da API de embeddings | vazio |
+| `JINA_EMBEDDING_MODEL` | Modelo de embedding | `jina-embeddings-v5-text-small` |
+| `JINA_EMBEDDING_DIMENSIONS` | Dimensão do vetor (fixa no schema) | `1024` |
+| `DEEPSEEK_API_KEY` | Chave da API DeepSeek | vazio |
+| `DEEPSEEK_MODEL` | Modelo usado para resumos | `deepseek-flash` |
 
 O `.env` usa `POSTGRES_HOST=localhost` para permitir rodar a API e comandos
 Alembic direto no host. No container, o Compose sobrescreve
@@ -61,18 +80,23 @@ Alembic direto no host. No container, o Compose sobrescreve
 
 ## Como executar
 
-Subir API e Postgres em desenvolvimento:
+Subir API, Postgres, MinIO, RabbitMQ e worker em desenvolvimento:
 
 ```bash
 docker compose up --build -d
 docker compose logs -f api
+docker compose logs -f worker
 ```
 
 A API ficará disponível em `http://127.0.0.1:8000`, com documentação em
-`http://127.0.0.1:8000/docs`.
+`http://127.0.0.1:8000/docs`. O console do MinIO fica em
+`http://127.0.0.1:9001` e o management do RabbitMQ em
+`http://127.0.0.1:15672`.
 
 O código é montado dentro do container com hot reload. O Postgres fica exposto
-em `localhost:5432` para inspeção com clientes SQL.
+em `localhost:5432` para inspeção com clientes SQL. O worker roda em uma imagem
+própria (`worker-dev`/`worker-runtime`) porque carrega Docling, modelos de layout
+e Tesseract, e pode escalar independentemente da API.
 
 Para parar:
 
@@ -98,7 +122,9 @@ uv run fastapi dev
 O Alembic está configurado para usar a mesma `Settings` da aplicação, com engine
 async. A migration inicial cria as tabelas `categories`, `products`,
 `customers`, `orders`, `order_items` e `promotions`, com enums nativos do
-Postgres, índices, checks e colunas de auditoria.
+Postgres, índices, checks e colunas de auditoria. A migration de documentos cria
+`documents`, `document_sections` e `document_chunks`, habilita as extensões
+`vector` e `ltree` e adiciona índices HNSW, GiST e GIN.
 
 Comandos canônicos, executados dentro do container da API:
 
@@ -146,6 +172,49 @@ datas usam ISO-8601 e booleanos aceitam `true/false` ou `0/1`. Os CSVs não são
 versionados; `data/` está no `.gitignore`. A importação inteira roda em uma
 transação e ajusta as sequences após inserir IDs explícitos.
 
+## Ingestão de documentos
+
+O pipeline aceita apenas PDF e é assíncrono:
+
+```text
+POST /documents
+  -> valida PDF/tamanho/páginas e calcula SHA-256 em streaming
+  -> MinIO: sources/{sha256}.pdf
+  -> documents (pending) + task no RabbitMQ
+  -> worker: Docling -> árvore de seções -> chunks -> resumos DeepSeek
+             -> embeddings Jina -> Postgres/pgvector
+```
+
+Comportamento principal:
+
+- reenvio do mesmo conteúdo retorna `409` (deduplicação por SHA-256);
+- `DELETE /documents/{public_id}` é soft-delete e `POST /restore` desfaz;
+- `POST /documents/{public_id}/reprocess` refaz a ingestão usando o PDF já
+  armazenado;
+- checkpoints de parse, resumos e embeddings ficam em
+  `cache/{sha256}/...` no MinIO, então uma intermitência de provedor não perde
+  o processamento já feito;
+- em falha de reprocessamento, o índice anterior é preservado;
+- OCR é opcional (`DOCUMENTS_OCR_ENABLED=true`, Tesseract `por+eng`);
+- não há autenticação nesta fase; os endpoints de escrita devem ficar restritos
+  à rede interna até a camada de auth ser implementada.
+
+Exemplo com `curl`:
+
+```bash
+curl -X POST http://127.0.0.1:8000/documents \
+  -F "file=@politicas.pdf" \
+  -F "name=Políticas da loja"
+
+curl http://127.0.0.1:8000/documents
+curl http://127.0.0.1:8000/documents/{public_id}/sections
+curl http://127.0.0.1:8000/documents/{public_id}/chunks
+```
+
+O worker usa `--concurrency=1` por padrão. A Jina é chamada com rate limit local
+(100 RPM / 100k TPM), retries com backoff e `Retry-After`; o Celery também
+reprocessa a task até 3 vezes com backoff.
+
 ## Testes
 
 Testes unitários e de contrato:
@@ -185,6 +254,15 @@ testes; não é preciso migrar manualmente.
 | `GET` | `/orders/{order_id}` | Detalhe do pedido com itens |
 | `GET` | `/promotions` | Lista paginada; filtros `product_id`, `is_active` |
 | `GET` | `/promotions/{promotion_id}` | Detalhe da promoção |
+| `POST` | `/documents` | Upload de PDF (`multipart`, campo `file`); `202` |
+| `GET` | `/documents` | Lista paginada; filtros `status`, `is_enabled`, `include_deleted` |
+| `GET` | `/documents/{public_id}` | Detalhe e contagens do documento |
+| `GET` | `/documents/{public_id}/sections` | Seções hierárquicas paginadas |
+| `GET` | `/documents/{public_id}/chunks` | Chunks paginados; filtro `section_public_id` |
+| `PATCH` | `/documents/{public_id}` | Nome, metadados e `is_enabled` |
+| `DELETE` | `/documents/{public_id}` | Soft-delete |
+| `POST` | `/documents/{public_id}/restore` | Restaura documento soft-deleted |
+| `POST` | `/documents/{public_id}/reprocess` | Reenfileira a ingestão |
 
 ### Paginação e erros
 

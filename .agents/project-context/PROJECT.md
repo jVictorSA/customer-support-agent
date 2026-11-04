@@ -40,6 +40,9 @@
     pagination envelope.
   - `src/app/modules/<module>/` — `domain`,
     `application`, `infrastructure`, `presentation`.
+  - `src/app/modules/documents/` — PDF ingestion, hierarchy/chunking,
+    DeepSeek summaries and Jina embeddings; `src/app/worker.py` is the Celery
+    composition root.
   - `src/app/infrastructure/importing/` and `cli/` — CSV
     importer and `import-csv` command.
   - `tests/` — unit/contract tests plus opt-in integration tests.
@@ -48,10 +51,10 @@
   `.agents/project-context/domain.md`. The six tables and the
   `categories/products/customers/orders/promotions` modules are implemented with
   GET-only routes; write routes and the AI agent are not implemented yet.
-- AI integration: planned by the product scope in
-  `.agents/project-context/domain.md` but not implemented; no LLM/RAG provider
-  dependency or provider configuration exists in `pyproject.toml` or
-  `core/config.py` at the time of this profile.
+- AI integration: document ingestion is implemented (Docling, DeepSeek
+  summaries, Jina embeddings, MinIO, Celery/RabbitMQ, pgvector). Retrieval,
+  hybrid search, reranking and the conversational DeepSeek answer flow are not
+  implemented yet. Provider configuration lives in `core/config.py`.
 
 ## Context selection
 

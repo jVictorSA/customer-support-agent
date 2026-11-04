@@ -89,9 +89,20 @@ must state why it is expected and the evidence source.
 - **Bulk data enters through the CSV importer** — `import-csv` is the only
   supported bulk path, runs outside startup and uses one transaction. Evidence:
   `infrastructure/importing/csv_importer.py`, `cli/import_csv.py`.
-- **GET-only public API for now** — business modules expose list/detail routes;
-  POST/PUT/PATCH/DELETE use cases do not exist yet even though repositories
-  support CRUD. Evidence: module routers and use-case modules.
+- **GET-only operational API; ingestion is the exception** — business modules
+  expose list/detail routes; only `/documents` has upload/update/delete routes
+  because ingestion is an operator workflow. Evidence: module routers.
+- **Integer PK + public UUID for documents** — document/section/chunk tables
+  keep the project's `Identity()` PK convention and expose a separate
+  `public_id` UUID in the API. Evidence: document models and schemas.
+- **Worker has its own image and composition root** — Celery/Docling/Tesseract
+  live in the worker image (`worker-runtime`/`worker-dev`), and
+  `src/app/worker.py` builds adapters per task with its own async engine.
+  Evidence: `Dockerfile`, `compose.yaml`, `src/app/worker.py`.
+- **Ingestion checkpoints live in object storage** — parse, summary and
+  embedding batches are cached under `cache/{sha256}/...` keyed by checksum and
+  version so provider transient failures do not discard completed work.
+  Evidence: `application/checkpoints.py`, MinIO storage adapter.
 
 ## Not yet conventions
 
