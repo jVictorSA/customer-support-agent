@@ -1,16 +1,10 @@
 import asyncio
 import logging
-from dataclasses import dataclass
 
 from app.modules.health.application.interfaces import HealthRepository
+from app.modules.health.domain.health import DatabaseHealthResult
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True, slots=True)
-class DatabaseHealthResult:
-    is_up: bool
-    detail: str | None = None
 
 
 class CheckDatabaseHealthUseCase:
