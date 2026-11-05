@@ -5,6 +5,21 @@ from uuid import UUID, uuid4
 
 
 @dataclass(frozen=True, slots=True)
+class ChunkRecord:
+    chunk_id: int
+    public_id: UUID
+    section_public_id: UUID
+    section_title: str
+    section_path: str
+    chunk_index: int
+    position: int
+    content: str
+    token_count: int
+    start_page: int
+    end_page: int
+
+
+@dataclass(frozen=True, slots=True)
 class ChunkDraft:
     """A chunk produced by the domain before persistence/embedding."""
 

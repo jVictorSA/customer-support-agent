@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.documents.application.exceptions import (
     DocumentChecksumConflictError,
 )
-from app.modules.documents.application.interfaces import ChunkRecord
+from app.modules.documents.domain.chunk import ChunkRecord
 from app.modules.documents.domain.chunk import ChunkDraft
 from app.modules.documents.domain.document import Document
 from app.modules.documents.domain.document_status import (

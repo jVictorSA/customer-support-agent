@@ -13,17 +13,15 @@ from app.modules.documents.application.exceptions import (
 from app.modules.documents.application.interfaces import (
     DocumentRepository,
     DocumentStorage,
-    PreparedUpload,
     TaskQueue,
-)
-from app.modules.documents.application.settings import (
-    DocumentIngestionSettings,
 )
 from app.modules.documents.domain.document import Document
 from app.modules.documents.domain.document_status import (
     DocumentStatus,
     ProcessingStage,
 )
+from app.modules.documents.domain.settings import DocumentIngestionSettings
+from app.modules.documents.domain.upload import PreparedUpload
 
 logger = logging.getLogger(__name__)
 

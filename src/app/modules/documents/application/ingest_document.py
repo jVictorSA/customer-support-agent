@@ -25,9 +25,7 @@ from app.modules.documents.application.interfaces import (
     EmbeddingProvider,
     SectionSummarizer,
 )
-from app.modules.documents.application.settings import (
-    DocumentIngestionSettings,
-)
+from app.modules.documents.domain.settings import DocumentIngestionSettings
 from app.modules.documents.domain.chunk import ChunkDraft
 from app.modules.documents.domain.chunker import (
     SectionChunker,

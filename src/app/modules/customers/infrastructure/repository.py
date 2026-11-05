@@ -35,6 +35,24 @@ class SqlAlchemyCustomerRepository:
             model = await self._session.get(CustomerModel, customer_id)
             return model.to_domain() if model is not None else None
 
+    async def find_by_credentials(
+        self, *, email: str, phone: str
+    ) -> Customer | None:
+        async with self._session.begin():
+            model = await self._session.scalar(
+                select(CustomerModel)
+                .where(
+                    func.lower(CustomerModel.email) == email.lower(),
+                    func.regexp_replace(
+                        CustomerModel.phone, r"\D", "", "g"
+                    )
+                    == phone,
+                )
+                .order_by(CustomerModel.customer_id)
+                .limit(1)
+            )
+            return model.to_domain() if model is not None else None
+
     async def list(
         self,
         *,

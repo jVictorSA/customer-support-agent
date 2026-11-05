@@ -7,8 +7,8 @@ from app.main import app
 from app.core.config import Settings, get_settings
 from app.modules.health.application.check_database_health import (
     CheckDatabaseHealthUseCase,
-    DatabaseHealthResult,
 )
+from app.modules.health.domain.health import DatabaseHealthResult
 from app.modules.health.presentation.dependencies import (
     get_check_database_health_use_case,
 )

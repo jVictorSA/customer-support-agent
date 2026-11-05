@@ -43,6 +43,10 @@
   - `src/app/modules/documents/` — PDF ingestion, hierarchy/chunking,
     DeepSeek summaries and Jina embeddings; `src/app/worker.py` is the Celery
     composition root.
+  - `src/app/modules/{auth,conversations,messages,complaints,agent}/` —
+    JWT authentication, conversation persistence, complaints, hybrid retrieval,
+    ReAct orchestration, deterministic tools and durable agent traces;
+    `src/app/agent_worker.py` is the chat worker composition root.
   - `src/app/infrastructure/importing/` and `cli/` — CSV
     importer and `import-csv` command.
   - `tests/` — unit/contract tests plus opt-in integration tests.
@@ -50,11 +54,13 @@
 - Domain data: the business scope, store rules and data model are summarized in
   `.agents/project-context/domain.md`. The six tables and the
   `categories/products/customers/orders/promotions` modules are implemented with
-  GET-only routes; write routes and the AI agent are not implemented yet.
-- AI integration: document ingestion is implemented (Docling, DeepSeek
-  summaries, Jina embeddings, MinIO, Celery/RabbitMQ, pgvector). Retrieval,
-  hybrid search, reranking and the conversational DeepSeek answer flow are not
-  implemented yet. Provider configuration lives in `core/config.py`.
+  GET-only routes; the conversation flow adds `conversations`, `messages`,
+  `complaints`, `agent_runs` and `agent_steps`.
+- AI integration: document ingestion and the conversational agent are
+  implemented (Docling, DeepSeek summaries/agents, Jina embeddings, MinIO,
+  Celery/RabbitMQ, pgvector). Retrieval is hybrid pgvector + Portuguese FTS with
+  RRF and parent-child expansion. Text-to-SQL, reranking and semantic memory are
+  not implemented. Provider configuration lives in `core/config.py`.
 
 ## Context selection
 

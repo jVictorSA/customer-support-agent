@@ -8,6 +8,10 @@ class CustomerRepository(Protocol):
 
     async def get_by_id(self, customer_id: int) -> Customer | None: ...
 
+    async def find_by_credentials(
+        self, *, email: str, phone: str
+    ) -> Customer | None: ...
+
     async def list(
         self,
         *,

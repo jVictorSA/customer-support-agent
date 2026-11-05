@@ -19,51 +19,66 @@
 
 ## Scope
 
-- Implemented: PDF ingestion only. Upload → MinIO → Celery/RabbitMQ →
-  Docling/PyMuPDF → section tree → hierarchical chunking → DeepSeek section
-  summaries → Jina embeddings → Postgres/pgvector.
-- Not implemented: retrieval endpoints, hybrid search, parent-child expansion,
-  reranking, and the conversational agent that will answer with DeepSeek.
+- Implemented: PDF ingestion and the conversational agent. Ingestion runs
+  upload → MinIO → Celery/RabbitMQ → Docling/PyMuPDF → section tree →
+  hierarchical chunking → DeepSeek summaries → Jina embeddings →
+  Postgres/pgvector. Chat runs API enqueue → `agent-worker` → intent agent →
+  ReAct orchestrator → hybrid retrieval / deterministic data tools / complaint
+  tool → response writer → grounding validation → persisted messages, traces
+  and optional signed webhook.
+- Not implemented: text-to-SQL, reranking, semantic memory over past messages,
+  historical summarization and operator resolution of complaints.
 - Relevant paths:
-  - `src/app/modules/documents/` — ingestion module using the four-layer
-    structure.
-  - `src/app/worker.py` — worker composition root (separate image/deployment).
-  - `src/app/core/config.py` — provider, model, timeout, storage and queue
-    settings.
-  - `src/app/modules/documents/infrastructure/` — Docling, MinIO, Jina,
-    DeepSeek and Celery adapters.
-  - `tests/documents/` and `tests/integration/test_document_repository.py` —
-    unit/contract and opt-in database tests.
-- Business/product requirements: future retrieval must ground prices, stock,
-  order status, deadlines and promotions in system data, and must not answer
-  out-of-scope requests as if the store sold those items.
+  - `src/app/modules/agent/` — ReAct loop, tools, prompts, traces and webhook
+    delivery.
+  - `src/app/modules/documents/` — ingestion and hybrid retrieval SQL.
+  - `src/app/agent_worker.py` — chat worker composition root.
+  - `src/app/modules/{auth,conversations,messages,complaints}/` — JWT,
+    persistence and ownership boundaries.
+  - `src/app/core/config.py` — provider, model, timeout, retrieval, auth and
+    webhook settings.
+  - `tests/agent/` and `tests/integration/test_conversation_flow.py` —
+    orchestration fakes and opt-in database tests.
+- Business/product requirements: prices, stock, order status, deadlines and
+  promotion validity come from deterministic tools, never from the model.
+  Out-of-scope accessory requests are redirected.
 
 ## Contracts
 
 - Provider adapters stay in `infrastructure`; `application` and `domain` never
-  import Docling, Jina, DeepSeek, MinIO or Celery SDKs.
-- Prompt/schema/tool/caller coupling: section summary prompts are versioned by
-  `DOCUMENTS_SUMMARY_VERSION`; changing the prompt contract should bump the
-  version so cached summaries are invalidated.
-- Input/output validation: PDF MIME/magic, encrypted PDFs, page count, Jina
-  embedding dimension and finite vectors are validated before persistence.
-  Chunks and summaries are treated as untrusted content and clearly delimited
-  in prompts.
-- Sensitive-data handling: never expose Jina/DeepSeek keys, prompts, raw
-  provider errors or customer PII in HTTP responses or logs. Provider failures
-  are logged server-side and stored as stable error codes.
-- Timeout/retry/fallback: Jina has local RPM/TPM limiting, exponential backoff,
-  `Retry-After` support and a bounded retry budget. DeepSeek uses the OpenAI SDK
-  retry/timeout policy. Celery retries the ingestion task up to three times with
-  backoff; checkpoints in MinIO prevent redoing completed parse/summary/embedding
-  work.
-- Configuration and secrets: provider API keys are `SecretStr` settings loaded
-  from environment variables. `.env.example` documents placeholders; deploy env
-  files keep fictitious values only.
-- Failure semantics: a failed reprocess preserves the previous completed index
-  and records `last_error_code`; a failed first ingestion becomes `failed`.
-- Out-of-scope requests and store policy grounding remain requirements for the
-  future retrieval/agent phase.
+  import Docling, Jina, DeepSeek, MinIO, Celery or PyJWT SDKs.
+- Chat tool schemas and prompts are a contract: `search_store_knowledge`,
+  `search_catalog`, `get_product_details`, `list_my_orders`,
+  `get_order_status`, `register_complaint` and the disabled `text_to_sql`.
+  Changing a tool name/field requires updating prompts, tests and traces.
+- Tools never accept `customer_id`; the server-derived `CustomerScope` filters
+  orders and complaints. Other customers' records are unreachable by contract.
+- Structured outputs are JSON objects validated in `application`; a repair call
+  is attempted before failing a step. The writer output is validated by a
+  deterministic grounding check (citations, required data tool, currency
+  values) with one repair attempt and a safe fallback.
+- The orchestrator prompt is explicitly ReAct: each iteration must expose a
+  `Thought`, then at most one native tool call (Action), then consume the tool
+  result (Observation) before the next Thought. It finishes with
+  `Thought + Final Answer`, a handoff note for the writer.
+- Out-of-scope is broader than accessories: the intent agent returns
+  `out_of_scope_type` in `accessory`, `benign_off_topic`, `harmful_or_illegal`
+  or `other`. Harmful/illegal requests are refused deterministically before the
+  orchestrator or writer runs; benign off-topic requests are redirected by the
+  writer. Prompt injection and retrieved content remain untrusted data.
+- Every LLM call, tool call and validation is persisted in `agent_runs` /
+  `agent_steps` (prompts, outputs, tool args/results, token usage, latency and
+  error code). Trace writes are best-effort and never block delivery.
+- Webhook payloads are versioned and signed with HMAC-SHA256 over
+  `timestamp.body`; delivery status and attempts live on the assistant message.
+- Chat turns are idempotent: one in-flight user message per conversation and
+  `client_message_id` uniqueness. Celery redelivery cannot process a claimed
+  message twice; stale processing is reclaimable.
+- Ingestion still validates PDF MIME/magic, encrypted PDFs, page count, Jina
+  embedding dimension/finite vectors, uses MinIO checkpoints and retries
+  provider calls with bounded backoff.
+- Provider failures are logged server-side and stored as stable error codes;
+  HTTP responses never include prompts, SQL, credentials or raw provider errors.
 
 ## Test expectations
 

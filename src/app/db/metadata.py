@@ -8,6 +8,12 @@ from app.db.base import Base
 from app.modules.categories.infrastructure.models import (
     CategoryModel,
 )
+from app.modules.agent.infrastructure.trace.models import (
+    AgentRunModel,
+    AgentStepModel,
+)
+from app.modules.complaints.infrastructure.models import ComplaintModel
+from app.modules.conversations.infrastructure.models import ConversationModel
 from app.modules.customers.infrastructure.models import (
     CustomerModel,
 )
@@ -16,6 +22,7 @@ from app.modules.documents.infrastructure.models import (
     DocumentModel,
     DocumentSectionModel,
 )
+from app.modules.messages.infrastructure.models import MessageModel
 from app.modules.orders.infrastructure.models import (
     OrderItemModel,
     OrderModel,
@@ -29,11 +36,16 @@ from app.modules.promotions.infrastructure.models import (
 
 __all__ = [
     "Base",
+    "AgentRunModel",
+    "AgentStepModel",
     "CategoryModel",
+    "ComplaintModel",
+    "ConversationModel",
     "CustomerModel",
     "DocumentChunkModel",
     "DocumentModel",
     "DocumentSectionModel",
+    "MessageModel",
     "OrderItemModel",
     "OrderModel",
     "ProductModel",

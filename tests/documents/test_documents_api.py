@@ -7,8 +7,8 @@ from app.main import app
 from app.modules.documents.application.exceptions import (
     DocumentChecksumConflictError,
 )
-from app.modules.documents.application.interfaces import ChunkRecord
-from app.modules.documents.application.settings import (
+from app.modules.documents.domain.chunk import ChunkRecord
+from app.modules.documents.domain.settings import (
     DocumentIngestionSettings,
 )
 from app.modules.documents.domain.document import Document

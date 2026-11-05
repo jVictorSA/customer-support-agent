@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.modules.documents.application.interfaces import ChunkRecord
+from app.modules.documents.domain.chunk import ChunkRecord
 from app.modules.documents.domain.document import Document
 from app.modules.documents.domain.document_status import DocumentStatus
 from app.modules.documents.domain.section import DocumentSection

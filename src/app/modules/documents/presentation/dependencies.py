@@ -28,7 +28,7 @@ from app.modules.documents.application.list_sections import (
 from app.modules.documents.application.reprocess_document import (
     ReprocessDocumentUseCase,
 )
-from app.modules.documents.application.settings import (
+from app.modules.documents.domain.settings import (
     DocumentIngestionSettings,
 )
 from app.modules.documents.application.update_document import (

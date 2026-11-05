@@ -86,10 +86,65 @@ class Settings(BaseSettings):
     deepseek_summary_input_max_tokens: int = 6000
     deepseek_disable_thinking: bool = True
 
-    @field_validator("jina_api_key", "deepseek_api_key", mode="before")
+    # Authentication -----------------------------------------------------
+    auth_jwt_secret: SecretStr = SecretStr(
+        "change-me-in-production-please-use-32-bytes"
+    )
+    auth_jwt_algorithm: str = "HS256"
+    auth_access_token_expire_minutes: int = 15
+    auth_refresh_token_expire_days: int = 7
+
+    # Conversational agent ------------------------------------------------
+    agent_max_iterations: int = 6
+    agent_history_max_messages: int = 20
+    agent_history_max_tokens: int = 6000
+    agent_prompt_version: str = "conversation-v1"
+    agent_text_to_sql_enabled: bool = False
+    agent_disable_thinking: bool = True
+
+    agent_intent_model: str | None = None
+    agent_orchestrator_model: str | None = None
+    agent_rewriter_model: str | None = None
+    agent_writer_model: str | None = None
+    agent_intent_temperature: float = 0.0
+    agent_orchestrator_temperature: float = 0.1
+    agent_rewriter_temperature: float = 0.0
+    agent_writer_temperature: float = 0.4
+    agent_intent_max_tokens: int = 600
+    agent_orchestrator_max_tokens: int = 1200
+    agent_rewriter_max_tokens: int = 400
+    agent_writer_max_tokens: int = 1200
+    agent_tool_result_max_chars: int = 6000
+
+    retrieval_vector_top_k: int = 20
+    retrieval_lexical_top_k: int = 20
+    retrieval_rrf_k: int = 60
+    retrieval_final_k: int = 8
+    retrieval_context_max_tokens: int = 6000
+
+    conversation_webhook_secret: SecretStr = SecretStr(
+        "change-me-in-production-please-use-32-bytes"
+    )
+    conversation_webhook_timeout: float = 10.0
+    conversation_webhook_max_retries: int = 5
+    conversation_webhook_allow_private_hosts: bool = False
+
+    celery_agent_task_soft_time_limit: int = 240
+    celery_agent_task_time_limit: int = 300
+    celery_agent_max_retries: int = 3
+
+    @field_validator(
+        "jina_api_key",
+        "deepseek_api_key",
+        mode="before",
+    )
     @classmethod
     def _empty_secret_is_none(cls, value: object) -> object:
         return None if value == "" else value
+
+    @property
+    def deepseek_agent_model(self) -> str:
+        return self.deepseek_model
 
     @property
     def sqlalchemy_database_url(self) -> URL:

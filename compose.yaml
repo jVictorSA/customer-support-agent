@@ -120,6 +120,29 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  agent-worker:
+    build:
+      context: .
+      target: agent-runtime
+    command:
+      - celery
+      - -A
+      - app.agent_worker.celery_app
+      - worker
+      - --loglevel=INFO
+      - --concurrency=2
+      - --queues=conversations.process
+    environment:
+      POSTGRES_HOST: db
+      RABBITMQ_HOST: rabbitmq
+      TZ: UTC
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres_data:
     name: ${POSTGRES_VOLUME_NAME:-customer_support_agent_postgres_data}
