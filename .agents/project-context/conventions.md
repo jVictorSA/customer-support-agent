@@ -140,12 +140,21 @@ must state why it is expected and the evidence source.
 - **One in-flight user turn per conversation** — `POST /messages` returns `409`
   while a queued/processing user message exists; `client_message_id` provides
   idempotency. Evidence: `modules/messages/infrastructure/repository.py`.
+- **Text-to-SQL is isolated behind a read-only role and RLS** — the executor
+  uses `text_to_sql_reader`, `SET TRANSACTION READ ONLY`, `app.customer_id` and
+  `statement_timeout`; SQLGlot validation and the semantic catalog are defense
+  in depth, not the only control. Evidence:
+  `modules/text_to_sql/infrastructure/sql/`,
+  `alembic/versions/a7b8c9d0e1f2_enable_text_to_sql_rls.py`.
+- **Static Text-to-SQL catalog** — the small schema is sent whole to the model;
+  metrics are deterministic templates and the catalog has a drift test. Evidence:
+  `modules/text_to_sql/domain/catalog.py`,
+  `tests/integration/test_text_to_sql.py`.
 
 ## Not yet conventions
 
 The following are open decisions and must not be treated as established rules:
 authentication on the legacy `/customers` and `/orders` routes, write endpoints
-for the operational business modules, text-to-SQL/reranking/semantic memory,
-complaint resolution workflow, and lint/format/type-check/CI tooling. Evidence:
-legacy routers still have no auth dependency, `AGENT_TEXT_TO_SQL_ENABLED`
-defaults to false, and no lint/CI configuration exists.
+for the operational business modules, reranking/semantic memory, complaint
+resolution workflow, and lint/format/type-check/CI tooling. Evidence: legacy
+routers still have no auth dependency and no lint/CI configuration exists.

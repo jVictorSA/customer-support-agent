@@ -18,9 +18,9 @@
 uv run pytest
 ```
 
-Verified on 2026-11-04 after the conversational flow: `86 passed, 8 skipped`
-(the skipped tests are the opt-in Postgres integration tests). This is the only
-automated quality gate currently configured.
+Verified on 2026-11-04 after Text-to-SQL: `133 passed, 15 skipped`
+(the skipped tests are the opt-in Postgres integration/provider tests). This is
+the only automated quality gate currently configured.
 
 ## Targeted checks
 
@@ -55,6 +55,12 @@ automated quality gate currently configured.
   trace tables, retrieval SQL or migrations. For prompt/tool schema changes,
   update `tests/agent/test_process_message.py` and the tool contracts together.
   Real provider smoke tests must be marked `provider`.
+- Text-to-SQL change: run `uv run pytest`; unit tests use a scripted SQL chat
+  model and fake executor. Run the integration command for RLS, read-only role,
+  metric templates or catalog drift (`tests/integration/test_text_to_sql.py`).
+  The opt-in evaluation dataset is marked `provider` and requires
+  `DEEPSEEK_API_KEY` plus `RUN_INTEGRATION_TESTS=1`; never call the real provider
+  in the default suite.
 - CSV import change: run the parser unit tests and, when the database is
   available, the opt-in importer integration test. The command itself is:
 

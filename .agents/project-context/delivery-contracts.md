@@ -84,6 +84,12 @@
 - Conversation configuration: `AUTH_*`, `AGENT_*`, `RETRIEVAL_*` and
   `CONVERSATION_WEBHOOK_*`. JWT and webhook secrets are `SecretStr`; deploy env
   files keep fictitious values only.
+- Text-to-SQL configuration: `AGENT_TEXT_TO_SQL_ENABLED` is the feature flag;
+  `TEXT_TO_SQL_DB_USER`/`TEXT_TO_SQL_DB_PASSWORD` build the read-only URL and
+  `TEXT_TO_SQL_DATABASE_URL` is an optional override. `TEXT_TO_SQL_*` controls
+  model, attempts, row limits, timeout and AST/join limits. The role
+  `text_to_sql_reader` must exist before the RLS migration; deploy docs and
+  `docker/postgres/init/02-create-text-to-sql-role.sh` own role creation.
 - Secret handling: `.env` is not versioned; `deploy/.env.hml` and
   `deploy/.env.prod` contain fictitious values only. Real credentials must come
   from a secret manager/CI environment, never Git or the image.
@@ -104,6 +110,9 @@
     Both scale independently from the API.
   - `db` uses `pgvector/pgvector:pg17`; the migration enables `vector` and
     `ltree`.
+  - Text-to-SQL RLS/grants are applied by migration `a7b8c9d0e1f2`; role creation
+    is a prerequisite and is not part of the migration. Fresh dev/test volumes
+    run the init script; existing volumes need the documented manual step.
   - The production image runs as a non-root user; `deploy/` and `.env*` are
     excluded from the Docker context.
   - Document write routes have no authentication yet; restrict network exposure

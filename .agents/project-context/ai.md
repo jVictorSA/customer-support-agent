@@ -26,11 +26,17 @@
   ReAct orchestrator → hybrid retrieval / deterministic data tools / complaint
   tool → response writer → grounding validation → persisted messages, traces
   and optional signed webhook.
-- Not implemented: text-to-SQL, reranking, semantic memory over past messages,
-  historical summarization and operator resolution of complaints.
+- Implemented: Text-to-SQL as an opt-in ReAct tool for catalog/stock/promotions
+  and the authenticated customer's own orders. It uses a static semantic
+  catalog, deterministic metric templates, SQLGlot validation, a dedicated
+  read-only role and Postgres RLS.
+- Not implemented: reranking, semantic memory over past messages, historical
+  summarization and operator resolution of complaints.
 - Relevant paths:
   - `src/app/modules/agent/` — ReAct loop, tools, prompts, traces and webhook
     delivery.
+  - `src/app/modules/text_to_sql/` — semantic catalog, metric templates,
+    generation/validation/execution pipeline and SQL status contracts.
   - `src/app/modules/documents/` — ingestion and hybrid retrieval SQL.
   - `src/app/agent_worker.py` — chat worker composition root.
   - `src/app/modules/{auth,conversations,messages,complaints}/` — JWT,
@@ -49,8 +55,12 @@
   import Docling, Jina, DeepSeek, MinIO, Celery or PyJWT SDKs.
 - Chat tool schemas and prompts are a contract: `search_store_knowledge`,
   `search_catalog`, `get_product_details`, `list_my_orders`,
-  `get_order_status`, `register_complaint` and the disabled `text_to_sql`.
+  `get_order_status`, `register_complaint` and the opt-in `text_to_sql`.
   Changing a tool name/field requires updating prompts, tests and traces.
+- `text_to_sql` only receives a `question`; the customer scope is server-derived.
+  It returns `answered`, `clarification_required`, `unsupported` or
+  `unavailable` as structured data. SQL is never sent to the writer or customer;
+  it is persisted in `agent_steps` together with the result rows.
 - Tools never accept `customer_id`; the server-derived `CustomerScope` filters
   orders and complaints. Other customers' records are unreachable by contract.
 - Structured outputs are JSON objects validated in `application`; a repair call
@@ -88,5 +98,9 @@
   codes and provider retry behavior (`httpx.MockTransport`).
 - Opt-in integration tests (`RUN_INTEGRATION_TESTS=1`) cover pgvector, ltree,
   FTS, the migration and document repository against the test database.
+- Text-to-SQL unit tests use a scripted fake SQL chat model and executor; they
+  cover policy rejection, one technical repair, metric templates and status
+  mapping. Integration tests cover RLS, read-only writes and catalog drift.
 - Real provider smoke tests must be marked `provider` and never run in the
-  default suite.
+  default suite; the Text-to-SQL evaluation dataset is also `provider` and uses
+  the test database.

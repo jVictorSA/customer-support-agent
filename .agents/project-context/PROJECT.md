@@ -47,6 +47,8 @@
     JWT authentication, conversation persistence, complaints, hybrid retrieval,
     ReAct orchestration, deterministic tools and durable agent traces;
     `src/app/agent_worker.py` is the chat worker composition root.
+  - `src/app/modules/text_to_sql/` — opt-in Text-to-SQL with static semantic
+    catalog, deterministic metrics, SQLGlot validation, read-only role and RLS.
   - `src/app/infrastructure/importing/` and `cli/` — CSV
     importer and `import-csv` command.
   - `tests/` — unit/contract tests plus opt-in integration tests.
@@ -59,7 +61,9 @@
 - AI integration: document ingestion and the conversational agent are
   implemented (Docling, DeepSeek summaries/agents, Jina embeddings, MinIO,
   Celery/RabbitMQ, pgvector). Retrieval is hybrid pgvector + Portuguese FTS with
-  RRF and parent-child expansion. Text-to-SQL, reranking and semantic memory are
+  RRF and parent-child expansion. Text-to-SQL is implemented as an opt-in agent
+  tool with a static catalog, deterministic metrics, SQLGlot validation,
+  dedicated read-only role and Postgres RLS. Reranking and semantic memory are
   not implemented. Provider configuration lives in `core/config.py`.
 
 ## Context selection
