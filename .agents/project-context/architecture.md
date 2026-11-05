@@ -17,6 +17,11 @@ when a boundary, transaction rule, or extension point changes.
 - `src/app/modules/documents/` — four-layer document ingestion module
   (Docling, MinIO, Jina, DeepSeek and Celery adapters live in
   `infrastructure`).
+- `src/app/modules/{auth,conversations,messages,complaints,agent}/` — JWT auth,
+  conversation/message persistence, complaints, hybrid retrieval, ReAct
+  orchestration and trace persistence.
+- `src/app/agent_worker.py` — Celery worker composition root for chat turns; it
+  creates its own async engine/session per task and does not import Docling.
 - `src/app/worker.py` — Celery worker composition root; it creates its own async
   engine/session per task instead of reusing the API request session.
 - `src/app/db/session.py` — session-per-request and
@@ -35,6 +40,10 @@ when a boundary, transaction rule, or extension point changes.
 - `domain` may import: standard library and other `domain` files only.
 - `domain` must not import: SQLAlchemy, FastAPI, Pydantic, `application`,
   `infrastructure`, or `presentation`.
+- Dataclasses and DTOs (entities, value objects, result/read models, chat/tool
+  payloads, trace steps, processing contexts and configuration snapshots) live
+  in `domain`. `application` contains use cases and `Protocol` ports; Pydantic
+  request/response schemas stay in `presentation`.
 - `application` may import: standard library, `domain`, its own `application`
   files, and `core.exceptions` (shared error base only).
 - `application` must not import: SQLAlchemy, FastAPI, `infrastructure`,
@@ -61,6 +70,11 @@ when a boundary, transaction rule, or extension point changes.
   `infrastructure`, `application` and `core`, never `presentation`.
 - The API and worker use separate images/deployments. The API image does not
   install Docling/Tesseract; the worker image does. Scale them independently.
+- The chat agent uses a third lightweight image (`agent-worker`) with the
+  `agent` dependency group; it consumes `conversations.process` and never
+  imports Docling.
+- Chat turns are enqueued by the API and processed by `agent_worker.py`; the
+  agent application depends on `Protocol` ports and never imports provider SDKs.
 - `main.py` may import: `presentation`, `db`, and `core`; it must not contain
   business rules.
 - Business behavior belongs in: `domain` (pure rules/value objects) or the
@@ -128,9 +142,10 @@ when a boundary, transaction rule, or extension point changes.
   `deleted_at IS NULL`, `is_enabled = true` and `status = 'completed'`.
 - `AppError` now carries `status_code` (default 400); the shared handler uses it
   directly. 404/409 subclasses keep their existing statuses.
-- Open decisions (do not invent them silently): authentication/authorization,
-  lint/format/type-check/CI tooling, and the full error catalog beyond the
-  statuses currently implemented (400/404/409/413/415/422/503).
+- Open decisions (do not invent them silently): authentication on the legacy
+  `/customers` and `/orders` routes, write endpoints for operational modules,
+  text-to-SQL, reranking, semantic memory, complaint resolution workflow and
+  lint/format/type-check/CI tooling.
 
 ## Extension points
 

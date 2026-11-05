@@ -28,17 +28,17 @@
   and are included in `main.py`. Current routes: `GET /` (API name/version/status),
   `GET /health` (liveness), `GET /health/db` (database readiness), plus
   `GET /categories`, `/products`, `/customers`, `/orders`, `/promotions` with
-  `/{id}` detail routes, plus the `/documents` ingestion surface:
-  `POST /documents`, `GET /documents`, `GET /documents/{public_id}`,
-  `GET /documents/{public_id}/sections`,
-  `GET /documents/{public_id}/chunks`, `PATCH /documents/{public_id}`,
-  `DELETE /documents/{public_id}`, `POST /documents/{public_id}/restore` and
-  `POST /documents/{public_id}/reprocess`. Business routes other than document
-  ingestion remain GET-only.
-- Authentication, authorization, and ownership gates: none implemented.
-  Do not assume an auth layer exists; introducing authentication is an open
-  decision (no auth dependency is declared in `pyproject.toml` and no auth
-  provider exists in the codebase).
+  `/{id}` detail routes, the `/documents` ingestion surface, the conversation
+  surface (`POST /auth/login`, `POST /auth/refresh`, `GET /auth/me`,
+  `POST/GET /conversations`, `GET /conversations/{public_id}`,
+  `POST/GET /conversations/{public_id}/messages`, `GET /complaints`,
+  `GET /complaints/{public_id}`), and the development-only
+  `POST /dev/webhooks/conversation`.
+- Authentication/authorization: JWT access tokens (15 min) and stateless
+  refresh tokens (7 days) via `Authorization: Bearer`. The new auth,
+  conversation, message and complaint routes require the token and filter by
+  the authenticated `customer_id`. `/customers`, `/orders`, catalog routes and
+  document ingestion remain without auth in this iteration (documented risk).
 - Response contract:
   - Every route declares an explicit `response_model`; never return ORM models.
   - Status codes must reflect the real result. `/health/db` returns `200` when
@@ -50,11 +50,20 @@
   - Business failures are signaled by the use case and translated to HTTP in
     presentation; use cases must not import `HTTPException`. The shared handler
     returns `{code, message}` using `AppError.status_code`: 404 for
-    `NotFoundError`, 409 for `ConflictError`, 413/415/422/503 for document
-    ingestion errors and 400 for other `AppError` subclasses.
+    `NotFoundError`, 409 for `ConflictError`, 401 for authentication errors,
+    413/415/422/503 for document/conversation errors and 400 for other
+    `AppError` subclasses.
   - Every list route uses `page`/`page_size` (default 20, max 100) and returns
-    `{items, total, page, page_size}`. Detail routes return the entity schema;
-    `GET /orders/{order_id}` additionally includes `items`.
+    `{items, total, page, page_size}`. Message listing also accepts
+    `after_message_id` (public UUID) for polling. Detail routes return the entity
+    schema; `GET /orders/{order_id}` additionally includes `items`.
+  - Message submission returns `202` with the queued user message; the assistant
+    reply is created asynchronously by `agent-worker` and can be observed by
+    polling. `client_message_id` is unique per conversation; a second in-flight
+    turn returns `409 conversation_busy`.
+  - Webhook delivery uses `X-Webhook-Signature: sha256=<HMAC>` over
+    `timestamp.body`, `X-Webhook-Timestamp` and `X-Webhook-Id`; delivery status
+    is persisted on the assistant message.
   - No stack trace, SQL, credentials, or internal paths in HTTP responses.
 - Language: API payloads and messages are in English; user-facing store content
   may follow the store policy material.
@@ -72,6 +81,9 @@
 - Document ingestion configuration: `DOCUMENTS_*` for limits/chunking/OCR,
   `MINIO_*`, `RABBITMQ_*`/`CELERY_*`, `JINA_*` and `DEEPSEEK_*`. Jina/DeepSeek
   keys are `SecretStr` and must be present only in the runtime environment.
+- Conversation configuration: `AUTH_*`, `AGENT_*`, `RETRIEVAL_*` and
+  `CONVERSATION_WEBHOOK_*`. JWT and webhook secrets are `SecretStr`; deploy env
+  files keep fictitious values only.
 - Secret handling: `.env` is not versioned; `deploy/.env.hml` and
   `deploy/.env.prod` contain fictitious values only. Real credentials must come
   from a secret manager/CI environment, never Git or the image.
@@ -85,9 +97,11 @@
   - Bulk data is loaded with `import-csv <directory>` (or
     `docker compose exec api import-csv <directory>`), never at startup. `data/`
     is ignored by Git; the importer upserts by primary key and resets sequences.
-  - Compose adds `rabbitmq`, `minio`, `minio-init` and `worker`. The worker
-    uses the separate `worker-runtime`/`worker-dev` image targets, runs
-    `--concurrency=1`, and scales independently from the API.
+  - Compose adds `rabbitmq`, `minio`, `minio-init`, `worker` and `agent-worker`.
+    The ingestion worker uses the `worker-runtime`/`worker-dev` image targets and
+    consumes `documents.ingest`. The chat worker uses the lightweight
+    `agent-runtime`/`agent-dev` targets and consumes `conversations.process`.
+    Both scale independently from the API.
   - `db` uses `pgvector/pgvector:pg17`; the migration enables `vector` and
     `ltree`.
   - The production image runs as a non-root user; `deploy/` and `.env*` are

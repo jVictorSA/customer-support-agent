@@ -7,8 +7,10 @@ Source of truth: `.agents/project-context/ai.md`,
 `.agents/project-context/domain.md`, and
 `.agents/project-context/architecture.md`.
 
-No AI integration exists yet. Do not assume provider SDKs, model names, or
-API-key settings are already present.
+Document ingestion and the conversational agent are implemented. Provider
+settings already exist for Jina and DeepSeek; auth uses PyJWT. Do not assume
+text-to-SQL, reranking, semantic memory or a complaint-resolution workflow
+exists.
 
 ## Mandatory
 
@@ -37,8 +39,11 @@ API-key settings are already present.
 
 ## Test expectations
 
-- Unit-test agent orchestration with fakes for the provider/tools; no real API
-  calls in the default `uv run pytest` suite.
-- Add contract tests for tool schemas and deterministic policy decisions.
-- Add opt-in integration tests only if a real provider is exercised; mark them
-  like the existing `integration` tests and document required env vars.
+- Unit-test agent orchestration with a scripted fake `ChatModel` and fake tool
+  gateways; no real API calls in the default `uv run pytest` suite. Evidence:
+  `tests/agent/test_process_message.py`.
+- Add contract tests for tool schemas, grounding decisions and message
+  idempotency/concurrency. Evidence: `tests/agent/`, `tests/messages/`.
+- Add opt-in integration tests for the new repositories and migrations; mark
+  them like the existing `integration` tests. Real provider smoke tests must be
+  marked `provider` and documented with required env vars.

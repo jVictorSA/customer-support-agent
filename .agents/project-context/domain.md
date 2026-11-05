@@ -1,8 +1,8 @@
 # Domain Context
 
 This is the versioned summary of the product scope, store rules and planned data
-model. It is the repository's reference for business behavior. It describes
-intended behavior, not implemented code.
+model. It is the repository's reference for business behavior and records which
+parts are implemented.
 
 ## Store profile
 
@@ -139,14 +139,21 @@ Operational data is loaded from six CSVs through `import-csv <directory>`:
 
 ## Implementation status
 
-- Implemented: ORM models, Alembic initial migration, repositories with CRUD,
+- Implemented: ORM models, Alembic migrations, repositories with CRUD,
   `list`/`get` use cases, GET routes with pagination/filters, shared error
   handling and the CSV importer. Document ingestion is implemented as a
   separate module (`documents`, `/documents`) with PDF upload, MinIO storage,
   Celery processing, hierarchical chunks, DeepSeek summaries and Jina
   embeddings stored in pgvector.
+- Implemented: conversational flow (`auth`, `conversations`, `messages`,
+  `complaints`, `agent`) with JWT login, conversation/message persistence,
+  complaint registration, hybrid retrieval, ReAct orchestration, deterministic
+  catalog/order tools, response writing, grounding validation, durable traces
+  and signed webhook delivery.
 - Not implemented: POST/PUT/PATCH/DELETE routes for the operational business
-  modules, authentication/authorization, retrieval/hybrid search, reranking,
-  and the conversational agent runtime.
+  modules, authentication on `/customers` and `/orders`, text-to-SQL,
+  reranking, semantic memory, complaint resolution workflow and full LGPD
+  retention policy for traces.
 - The `health` module remains the smallest structural reference; the business
-  modules show the full CRUD/pagination pattern.
+  modules show the full CRUD/pagination pattern, and the conversation modules
+  show the async agent workflow.

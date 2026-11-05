@@ -18,7 +18,7 @@
 uv run pytest
 ```
 
-Verified on 2026-11-04 after document ingestion: `53 passed, 5 skipped`
+Verified on 2026-11-04 after the conversational flow: `86 passed, 8 skipped`
 (the skipped tests are the opt-in Postgres integration tests). This is the only
 automated quality gate currently configured.
 
@@ -47,9 +47,14 @@ automated quality gate currently configured.
 - Document ingestion change: run `uv run pytest`; the unit/contract suite uses
   fakes and must not call Docling/Jina/DeepSeek/MinIO/RabbitMQ. For repository,
   migration, pgvector, ltree or FTS changes run the opt-in integration command
-  above. Building the worker image or exercising Docling requires the `worker`
-  dependency group (`uv sync --group worker`) and is not part of the default
-  gate.
+  above.
+- Conversational agent change: run `uv run pytest`. The default suite uses a
+  scripted fake `ChatModel`, fake tool gateways and fake trace/context ports;
+  it must not call DeepSeek, Jina, RabbitMQ or MinIO. Run the opt-in integration
+  command when changing conversation/message/complaint repositories, agent
+  trace tables, retrieval SQL or migrations. For prompt/tool schema changes,
+  update `tests/agent/test_process_message.py` and the tool contracts together.
+  Real provider smoke tests must be marked `provider`.
 - CSV import change: run the parser unit tests and, when the database is
   available, the opt-in importer integration test. The command itself is:
 
@@ -89,15 +94,19 @@ automated quality gate currently configured.
 - Integration tests are opt-in (`RUN_INTEGRATION_TESTS=1`) and require a
   running Postgres with the migration applied; local `uv run pytest` does not
   exercise the database.
-- Unit tests use FastAPI `TestClient` and dependency overrides; no external
-  service or LLM provider test harness exists.
+- Unit tests use FastAPI `TestClient` and dependency overrides; agent tests use a
+  scripted fake `ChatModel`, fake tool gateways and fake trace/context ports. No
+  real provider is called by the default suite.
 - Python 3.12 is required; `uv` manages the environment and lockfile.
-- The worker image installs Docling, PyTorch CPU, PyMuPDF and Tesseract from the
-  `worker` dependency group; validate it with
-  `docker compose build worker` before deploying. This heavy build is not part
-  of the default unit-test gate.
-- The default suite does not call MinIO, RabbitMQ, Jina or DeepSeek. End-to-end
-  ingestion requires those services and real provider keys.
+- The ingestion worker image installs Docling, PyTorch CPU, PyMuPDF and Tesseract
+  from the `worker` dependency group; the lightweight `agent-worker` image
+  installs only the `agent` group (OpenAI SDK, httpx, tiktoken). Validate both
+  with `docker compose build worker agent-worker` before deploying. These heavy
+  builds are not part of the default unit-test gate.
+- The default suite does not call MinIO, RabbitMQ, Jina, DeepSeek or the agent
+  worker. End-to-end ingestion requires those services and real provider keys;
+  end-to-end chat requires the API, `agent-worker`, Postgres, RabbitMQ and
+  DeepSeek (plus Jina for policy retrieval).
 
 ## Pre-commit handoff
 
