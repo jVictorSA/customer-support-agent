@@ -21,10 +21,8 @@ from app.modules.documents.application.exceptions import (
 from app.modules.documents.application.get_document import (
     GetDocumentUseCase,
 )
-from app.modules.documents.application.interfaces import (
-    PdfInspector,
-    PreparedUpload,
-)
+from app.modules.documents.application.interfaces import PdfInspector
+from app.modules.documents.domain.upload import PreparedUpload
 from app.modules.documents.application.list_chunks import (
     ListDocumentChunksUseCase,
 )
@@ -37,7 +35,7 @@ from app.modules.documents.application.list_sections import (
 from app.modules.documents.application.reprocess_document import (
     ReprocessDocumentUseCase,
 )
-from app.modules.documents.application.settings import (
+from app.modules.documents.domain.settings import (
     DocumentIngestionSettings,
 )
 from app.modules.documents.application.update_document import (

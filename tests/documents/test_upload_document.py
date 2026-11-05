@@ -9,10 +9,10 @@ from app.modules.documents.application.exceptions import (
     DocumentPayloadTooLargeError,
     DocumentQueueUnavailableError,
 )
-from app.modules.documents.application.interfaces import PreparedUpload
-from app.modules.documents.application.settings import (
+from app.modules.documents.domain.settings import (
     DocumentIngestionSettings,
 )
+from app.modules.documents.domain.upload import PreparedUpload
 from app.modules.documents.application.upload_document import (
     UploadDocumentUseCase,
 )

@@ -1,9 +1,8 @@
-from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Protocol
 from uuid import UUID
 
-from app.modules.documents.domain.chunk import ChunkDraft
+from app.modules.documents.domain.chunk import ChunkDraft, ChunkRecord
 from app.modules.documents.domain.document import Document
 from app.modules.documents.domain.document_status import (
     DocumentStatus,
@@ -14,18 +13,6 @@ from app.modules.documents.domain.section import (
     DocumentSection,
     SectionNode,
 )
-
-
-@dataclass(frozen=True, slots=True)
-class PreparedUpload:
-    """A PDF already streamed to disk and inspected by the presentation layer."""
-
-    original_filename: str
-    content_type: str
-    size_bytes: int
-    checksum: str
-    page_count: int
-    temp_path: Path
 
 
 class DocumentRepository(Protocol):
@@ -92,22 +79,7 @@ class DocumentRepository(Protocol):
         offset: int,
         limit: int,
         section_public_id: UUID | None = None,
-    ) -> tuple[List["ChunkRecord"], int]: ...
-
-
-@dataclass(frozen=True, slots=True)
-class ChunkRecord:
-    chunk_id: int
-    public_id: UUID
-    section_public_id: UUID
-    section_title: str
-    section_path: str
-    chunk_index: int
-    position: int
-    content: str
-    token_count: int
-    start_page: int
-    end_page: int
+    ) -> tuple[List[ChunkRecord], int]: ...
 
 
 class DocumentStorage(Protocol):
@@ -152,6 +124,8 @@ class EmbeddingProvider(Protocol):
     def dimensions(self) -> int: ...
 
     async def embed_passages(self, texts: list[str]) -> list[list[float]]: ...
+
+    async def embed_query(self, text: str) -> list[float]: ...
 
 
 class TaskQueue(Protocol):
