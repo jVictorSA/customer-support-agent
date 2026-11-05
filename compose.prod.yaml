@@ -2,6 +2,8 @@ services:
   db:
     env_file:
       - ${ENV_FILE:-deploy/.env.prod}
+    volumes:
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     restart: unless-stopped
 
   api:

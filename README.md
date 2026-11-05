@@ -83,7 +83,12 @@ As principais variáveis são:
 | `AGENT_HISTORY_MAX_MESSAGES` | Mensagens de contexto | `20` |
 | `AGENT_HISTORY_MAX_TOKENS` | Orçamento de tokens do histórico | `6000` |
 | `AGENT_*_MODEL` | Override de modelo por agente (vazio usa `DEEPSEEK_MODEL`) | vazio |
-| `AGENT_TEXT_TO_SQL_ENABLED` | Habilita a tool de text-to-SQL (não implementada) | `false` |
+| `AGENT_TEXT_TO_SQL_ENABLED` | Habilita a tool de text-to-SQL | `false` |
+| `TEXT_TO_SQL_DB_USER` | Role read-only usado pelo executor SQL | `text_to_sql_reader` |
+| `TEXT_TO_SQL_DB_PASSWORD` | Senha do role read-only | valor de desenvolvimento |
+| `TEXT_TO_SQL_DATABASE_URL` | URL completa opcional do banco read-only | vazio |
+| `TEXT_TO_SQL_MODEL` | Modelo do rewriter/gerador SQL (vazio usa `DEEPSEEK_MODEL`) | vazio |
+| `TEXT_TO_SQL_*` | Tentativas, linhas, timeout e limites de complexidade | `2/50/5000/4/30` |
 | `RETRIEVAL_*` | Top-k vetorial/lexical, RRF, contexto | `20/20/60/8/6000` |
 | `CONVERSATION_WEBHOOK_SECRET` | Segredo HMAC dos webhooks | valor de desenvolvimento |
 | `CONVERSATION_WEBHOOK_MAX_RETRIES` | Retries de entrega do webhook | `5` |
@@ -135,6 +140,48 @@ uv sync
 uv run fastapi dev
 ```
 
+## Text-to-SQL
+
+A tool `text_to_sql` responde perguntas analíticas e consultas complexas sobre
+catálogo, estoque, promoções e os pedidos do próprio cliente. Ela só é exposta
+quando `AGENT_TEXT_TO_SQL_ENABLED=true` e a conexão read-only está configurada.
+
+O fluxo é:
+
+```text
+pergunta + histórico
+  -> rewriter SQL (pergunta autônoma)
+  -> gerador (métrica determinística ou SELECT livre)
+  -> validação com SQLGlot
+  -> executor read-only (RLS + statement_timeout + LIMIT)
+  -> resposta estruturada + resumo
+  -> orquestrador/redator/grounding
+```
+
+Segurança:
+
+- role dedicado `text_to_sql_reader`, sem escrita;
+- RLS em `orders` e `order_items`, limitada por
+  `current_setting('app.customer_id')`;
+- allowlist de tabelas/colunas; `customers`, tabelas internas, PII, DDL/DML e
+  funções perigosas são bloqueados;
+- `SELECT *`, `CROSS JOIN`, CTEs recursivas e consultas acima dos limites são
+  recusados;
+- o SQL bruto fica apenas em `agent_steps`, nunca na resposta ao cliente.
+
+O role é criado pelo script `docker/postgres/init/02-create-text-to-sql-role.sh`
+em volumes novos. Para um banco já existente, crie o role antes de aplicar a
+migration de RLS:
+
+```bash
+docker compose exec db psql -U app -d customer_support_agent \
+  -c "CREATE ROLE text_to_sql_reader LOGIN PASSWORD 'troque-esta-senha';" \
+  -c "GRANT CONNECT ON DATABASE customer_support_agent TO text_to_sql_reader;"
+docker compose exec api alembic upgrade head
+```
+
+Não altere `TEXT_TO_SQL_DB_USER` sem ajustar os `GRANT`s da migration.
+
 ## Migrations
 
 O Alembic está configurado para usar a mesma `Settings` da aplicação, com engine
@@ -144,7 +191,9 @@ Postgres, índices, checks e colunas de auditoria. A migration de documentos cri
 `documents`, `document_sections` e `document_chunks`, habilita as extensões
 `vector` e `ltree` e adiciona índices HNSW, GiST e GIN. A migration de conversa
 cria `conversations`, `messages`, `complaints`, `agent_runs` e `agent_steps`,
-com enums, FKs, índice único parcial de idempotência e índices de consulta.
+com enums, FKs, índice único parcial de idempotência e índices de consulta. A
+migration de Text-to-SQL habilita RLS em `orders`/`order_items` e concede
+`SELECT` ao role `text_to_sql_reader`; o role precisa existir antes dela.
 
 Comandos canônicos, executados dentro do container da API:
 
@@ -252,6 +301,7 @@ agent-worker:
        -> search_store_knowledge (RAG híbrido + rewriter)
        -> search_catalog / get_product_details
        -> list_my_orders / get_order_status (escopo do cliente)
+       -> text_to_sql (métricas e consultas complexas, se habilitado)
        -> register_complaint
   -> response writer + validação de grounding
   -> messages (assistant) + agent_runs/agent_steps
@@ -275,6 +325,9 @@ Características principais:
   perigosos são recusados deterministicamente antes de qualquer tool ou writer;
 - **grounding**: preços/estoque/status precisam vir de tool; citações inválidas
   disparam reparo e, em último caso, fallback seguro;
+- **Text-to-SQL**: consultas agregadas e buscas complexas usam um pipeline
+  separado, com catálogo semântico, validação SQLGlot, role read-only e RLS por
+  cliente; o SQL bruto não é enviado ao redator nem ao cliente;
 - **traces**: todas as chamadas de LLM, tools e validações são persistidas em
   `agent_runs`/`agent_steps`, incluindo prompts, resultados, tokens e latência;
 - **sem autenticação nas rotas antigas**: `/customers` e `/orders` continuam
@@ -315,7 +368,16 @@ uv run pytest -m integration
 O banco `customer_support_agent_test` é criado automaticamente pelo script em
 `docker/postgres/init/` na primeira inicialização do volume. O fixture de
 integração aplica `alembic upgrade head` nesse banco automaticamente antes dos
-testes; não é preciso migrar manualmente.
+testes; não é preciso migrar manualmente. O fixture também garante o role
+`text_to_sql_reader` para os testes de RLS.
+
+Teste opcional de qualidade do Text-to-SQL com provider real:
+
+```bash
+RUN_INTEGRATION_TESTS=1 DEEPSEEK_API_KEY=... \
+POSTGRES_DB=customer_support_agent_test \
+uv run pytest -m provider
+```
 
 ## Endpoints
 
@@ -437,7 +499,7 @@ Postgres gerenciado, caso necessário.
 │   ├── .env.hml
 │   └── .env.prod
 ├── docker/
-│   └── postgres/init/        # criação do banco de testes
+│   └── postgres/init/        # banco de testes e role read-only
 ├── .agents/
 │   ├── project-context/      # perfil do projeto para agentes
 │   ├── rules/                # regras sempre carregadas
@@ -466,6 +528,7 @@ Postgres gerenciado, caso necessário.
 │           ├── messages/
 │           ├── complaints/
 │           ├── agent/
+│           ├── text_to_sql/
 │           ├── categories/
 │           ├── products/
 │           ├── customers/
@@ -477,6 +540,8 @@ Postgres gerenciado, caso necessário.
 │   ├── customers/
 │   ├── orders/
 │   ├── promotions/
+│   ├── agent/
+│   ├── text_to_sql/
 │   ├── importing/
 │   └── integration/
 ├── AGENTS.md
@@ -570,8 +635,12 @@ cliente é o produto, não o assistente de codificação.
   limiting nem revogação de refresh token.
 - Não há outbox transacional: se o enfileiramento falhar após criar a mensagem,
   ela é marcada como `failed` e a API responde `503`.
-- Text-to-SQL não está implementado; o agente responde catálogo, preço, estoque,
-  pedidos e políticas com tools determinísticas e RAG.
+- Text-to-SQL é opt-in e cobre catálogo, estoque, promoções e pedidos do próprio
+  cliente; não há métricas da loja inteira, cache de consultas, múltiplos
+  candidatos ou endpoint HTTP dedicado.
+- O trace de Text-to-SQL guarda o SQL e as linhas retornadas (até o limite
+  configurado); a política de retenção LGPD desses traces ainda é uma fase
+  futura.
 - Sem reranker, sumarização de histórico ou memória semântica de mensagens.
 - Os traces guardam prompts e conteúdo de conversa (dados sensíveis) em tabelas
   internas; a política completa de LGPD/retenção fica para uma próxima fase.

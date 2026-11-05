@@ -150,10 +150,16 @@ Operational data is loaded from six CSVs through `import-csv <directory>`:
   complaint registration, hybrid retrieval, ReAct orchestration, deterministic
   catalog/order tools, response writing, grounding validation, durable traces
   and signed webhook delivery.
+- Implemented: opt-in Text-to-SQL for catalog, stock, promotions and the
+  authenticated customer's own orders. It exposes six deterministic metrics
+  (`my_total_spent`, `my_order_count`, `my_average_order_value`,
+  `my_top_products`, `catalog_availability`, `active_promotions`) and validated
+  free SQL over an allowlist. Store-wide sales analytics and customer PII are
+  intentionally unavailable.
 - Not implemented: POST/PUT/PATCH/DELETE routes for the operational business
-  modules, authentication on `/customers` and `/orders`, text-to-SQL,
-  reranking, semantic memory, complaint resolution workflow and full LGPD
-  retention policy for traces.
+  modules, authentication on `/customers` and `/orders`, reranking, semantic
+  memory, complaint resolution workflow and full LGPD retention policy for
+  traces.
 - The `health` module remains the smallest structural reference; the business
   modules show the full CRUD/pagination pattern, and the conversation modules
   show the async agent workflow.

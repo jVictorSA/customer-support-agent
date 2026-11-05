@@ -16,6 +16,7 @@ class ToolResult:
     error_code: str | None = None
     error_message: str | None = None
     tool_name: str = ""
+    trace_payload: dict[str, Any] | None = None
 
     def to_payload(self) -> dict[str, Any]:
         if self.ok:

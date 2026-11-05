@@ -49,6 +49,18 @@ class ReActOrchestrator:
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": ORCHESTRATOR_SYSTEM_PROMPT}
         ]
+        if not self._settings.text_to_sql_enabled:
+            messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        "A ferramenta text_to_sql está desabilitada neste "
+                        "ambiente. Use search_catalog, get_product_details, "
+                        "list_my_orders, get_order_status e "
+                        "search_store_knowledge."
+                    ),
+                }
+            )
         for item in history[-self._settings.history_max_messages :]:
             messages.append({"role": item.role, "content": item.content})
         messages.append(

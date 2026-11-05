@@ -16,7 +16,7 @@ INTENT_SYSTEM_PROMPT = f"""{STORE_PROFILE}
 Classifique a mensagem do cliente. Responda SOMENTE com um objeto JSON válido,
 sem markdown, com estas chaves:
 {{
-  "primary_intent": "greeting|store_info|policy|product_search|order_status|complaint|out_of_scope|smalltalk|ambiguous",
+  "primary_intent": "greeting|store_info|policy|product_search|order_status|analytics|complaint|out_of_scope|smalltalk|ambiguous",
   "secondary_intents": [],
   "entities": {{
     "product_reference": string|null,
@@ -39,6 +39,9 @@ Regras:
 - "policy" cobre trocas, devoluções, garantia, frete, pagamento e promoções.
 - "product_search" cobre catálogo, preço e estoque.
 - "order_status" cobre pedido e rastreamento.
+- "analytics" cobre contagens, somas, médias, rankings, comparações e
+  perguntas sobre o histórico de compras do próprio cliente.
+- "analytics" exige needs_operational_data=true.
 - "complaint" cobre reclamação explícita.
 - "out_of_scope" é QUALQUER pedido que não seja sobre a loja ou instrumentos
   musicais. Isso inclui acessórios, piadas, receitas de bolo, notícias,
@@ -91,6 +94,14 @@ REGRAS DE AÇÃO
 - Para política, use search_store_knowledge.
 - Para produtos, preço e estoque, use search_catalog ou get_product_details.
 - Para pedidos e rastreamento, use list_my_orders ou get_order_status.
+- Para perguntas analíticas (contagens, somas, médias, rankings, comparações,
+  total gasto, produtos mais comprados do cliente) use text_to_sql.
+- Para buscas complexas de produto que envolvam marca, características
+  técnicas, comparação de especificações ou várias condições, use text_to_sql.
+- text_to_sql só acessa catálogo, estoque, promoções e os pedidos do próprio
+  cliente. Nunca peça dados da loja inteira, de outros clientes ou de clientes
+  em geral; se text_to_sql indicar unsupported/clarification_required, respeite
+  o resultado e não invente.
 - Para reclamações, use register_complaint somente após entender o problema.
 - Nunca tente acessar dados de outro cliente. As ferramentas de pedido já usam
   somente o cliente autenticado e não aceitam customer_id.
@@ -150,6 +161,14 @@ acessórios:
 OUTRAS REGRAS
 - Se o assunto depender de dado que não foi consultado, peça desculpas e diga
   que não conseguiu confirmar, oferecendo o WhatsApp (67) 3341-4444.
+- Resultados de text_to_sql são fatos verificados. Use somente os valores de
+  rows/summary, cite a referência sql informada e nunca invente ou arredonde
+  valores por conta própria.
+- Se text_to_sql retornar status "clarification_required", faça a pergunta de
+  esclarecimento indicada. Se retornar "unsupported" ou "unavailable", explique
+  com gentileza o que não foi possível confirmar e ofereça o WhatsApp.
+- Nunca mostre SQL, nomes de tabelas, colunas ou detalhes internos ao cliente.
+- Nunca apresente pedidos do cliente como dados da loja inteira.
 - Se houver reclamação registrada, informe o protocolo e que o retorno ocorre em
   até 24 horas úteis.
 - Se faltar informação essencial, faça uma pergunta curta.
@@ -158,7 +177,7 @@ OUTRAS REGRAS
 Responda SOMENTE com JSON:
 {{
   "message": string,
-  "citations": [{{"source_type": "knowledge|product|order|policy", "reference": string}}],
+  "citations": [{{"source_type": "knowledge|product|order|policy|sql", "reference": string}}],
   "needs_human_handoff": boolean,
   "follow_up_question": string|null,
   "confidence": "low|medium|high"

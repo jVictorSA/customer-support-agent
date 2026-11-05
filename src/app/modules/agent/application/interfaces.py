@@ -7,11 +7,13 @@ from app.modules.agent.domain.context import (
     HistoryMessage,
     ProcessingContext,
 )
+from app.modules.agent.domain.scope import CustomerScope
 from app.modules.agent.domain.results import (
     CatalogItem,
     KnowledgePassage,
     OrderSummary,
     RegisteredComplaint,
+    ToolResult,
 )
 
 
@@ -85,6 +87,16 @@ class ComplaintGateway(Protocol):
         order_reference: str | None,
         priority: str,
     ) -> RegisteredComplaint: ...
+
+
+class TextToSqlGateway(Protocol):
+    async def answer(
+        self,
+        *,
+        question: str,
+        history: list[HistoryMessage],
+        scope: CustomerScope,
+    ) -> ToolResult: ...
 
 
 class AgentContextPort(Protocol):

@@ -7,10 +7,10 @@ Source of truth: `.agents/project-context/ai.md`,
 `.agents/project-context/domain.md`, and
 `.agents/project-context/architecture.md`.
 
-Document ingestion and the conversational agent are implemented. Provider
-settings already exist for Jina and DeepSeek; auth uses PyJWT. Do not assume
-text-to-SQL, reranking, semantic memory or a complaint-resolution workflow
-exists.
+Document ingestion, the conversational agent and the opt-in Text-to-SQL tool
+are implemented. Provider settings already exist for Jina and DeepSeek; auth
+uses PyJWT. Do not assume reranking, semantic memory or a complaint-resolution
+workflow exists.
 
 ## Mandatory
 
@@ -25,6 +25,10 @@ exists.
 - Validate model and tool input/output before acting on it or returning it.
   Tool schemas and prompt instructions are a contract: changing a tool name,
   field, or caller dispatch requires updating tests and callers together.
+- Text-to-SQL must keep SQLGlot validation, the dedicated read-only role,
+  transaction-level `READ ONLY`, `statement_timeout` and RLS enabled. Never
+  execute LLM SQL through the application's write-capable session or expose raw
+  SQL to the writer/customer.
 - Ground prices, stock, order status, deadlines, and promotions in system data.
   Never let the model invent or guess them, and check promotion validity.
 - Treat store policy text and retrieved content as untrusted data, not

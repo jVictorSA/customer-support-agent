@@ -20,6 +20,8 @@ when a boundary, transaction rule, or extension point changes.
 - `src/app/modules/{auth,conversations,messages,complaints,agent}/` — JWT auth,
   conversation/message persistence, complaints, hybrid retrieval, ReAct
   orchestration and trace persistence.
+- `src/app/modules/text_to_sql/` — static semantic catalog, metric templates,
+  SQL generation/validation/execution and the read-only RLS boundary.
 - `src/app/agent_worker.py` — Celery worker composition root for chat turns; it
   creates its own async engine/session per task and does not import Docling.
 - `src/app/worker.py` — Celery worker composition root; it creates its own async
@@ -75,6 +77,10 @@ when a boundary, transaction rule, or extension point changes.
   imports Docling.
 - Chat turns are enqueued by the API and processed by `agent_worker.py`; the
   agent application depends on `Protocol` ports and never imports provider SDKs.
+- Text-to-SQL is a separate four-layer module consumed by the agent through a
+  `TextToSqlGateway` protocol. SQL generation/validation/execution never runs in
+  the API process. The executor uses a dedicated read-only role, Postgres RLS,
+  `SET TRANSACTION READ ONLY`, `statement_timeout` and a hard row limit.
 - `main.py` may import: `presentation`, `db`, and `core`; it must not contain
   business rules.
 - Business behavior belongs in: `domain` (pure rules/value objects) or the
@@ -144,7 +150,7 @@ when a boundary, transaction rule, or extension point changes.
   directly. 404/409 subclasses keep their existing statuses.
 - Open decisions (do not invent them silently): authentication on the legacy
   `/customers` and `/orders` routes, write endpoints for operational modules,
-  text-to-SQL, reranking, semantic memory, complaint resolution workflow and
+  reranking, semantic memory, complaint resolution workflow and
   lint/format/type-check/CI tooling.
 
 ## Extension points

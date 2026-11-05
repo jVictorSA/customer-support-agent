@@ -51,12 +51,14 @@ dev = [
     "openai>=1.109.1",
     "pytest>=8.4.0",
     "pytest-asyncio>=1.4.1.post1",
+    "sqlglot>=25.0.0",
 ]
 # Installed only by the conversational agent worker image:
 #   uv sync --group agent
 agent = [
     "httpx>=0.28.1",
     "openai>=1.109.1",
+    "sqlglot>=25.0.0",
     "tiktoken>=0.12.0",
 ]
 # Installed only by the ingestion worker image / integration runs:
