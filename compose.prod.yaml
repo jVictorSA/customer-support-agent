@@ -24,6 +24,11 @@ services:
       - ${ENV_FILE:-deploy/.env.prod}
     restart: unless-stopped
 
+  agent-worker:
+    env_file:
+      - ${ENV_FILE:-deploy/.env.prod}
+    restart: unless-stopped
+
 volumes:
   postgres_data:
     name: ${POSTGRES_VOLUME_NAME:-customer_support_agent_postgres_data_prod}
