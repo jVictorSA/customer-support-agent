@@ -5,10 +5,12 @@ from collections.abc import AsyncGenerator
 
 from celery import Celery
 from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 
 from app.core.config import get_settings
 from app.db import metadata as db_metadata  # noqa: F401
@@ -39,6 +41,9 @@ from app.modules.agent.infrastructure.tools.complaints import (
 )
 from app.modules.agent.infrastructure.tools.orders import (
     SqlAlchemyOrderGateway,
+)
+from app.modules.agent.infrastructure.tools.text_to_sql import (
+    TextToSqlToolAdapter,
 )
 from app.modules.agent.infrastructure.trace.repository import (
     SqlAlchemyTraceRepository,
@@ -77,6 +82,18 @@ from app.modules.messages.infrastructure.queue.celery_queue import (
 )
 from app.modules.messages.infrastructure.repository import (
     SqlAlchemyMessageRepository,
+)
+from app.modules.text_to_sql.application.answer import TextToSqlUseCase
+from app.modules.text_to_sql.domain.catalog import CATALOG
+from app.modules.text_to_sql.domain.settings import TextToSqlSettings
+from app.modules.text_to_sql.infrastructure.sql.executor import (
+    SqlAlchemyReadOnlyExecutor,
+)
+from app.modules.text_to_sql.infrastructure.sql.metrics import (
+    SqlMetricBuilder,
+)
+from app.modules.text_to_sql.infrastructure.sql.validator import (
+    SqlGlotValidator,
 )
 
 logger = logging.getLogger(__name__)
@@ -185,7 +202,10 @@ def _agent_settings() -> AgentRuntimeSettings:
         history_max_messages=settings.agent_history_max_messages,
         history_max_tokens=settings.agent_history_max_tokens,
         prompt_version=settings.agent_prompt_version,
-        text_to_sql_enabled=settings.agent_text_to_sql_enabled,
+        text_to_sql_enabled=(
+            settings.agent_text_to_sql_enabled
+            and settings.sqlalchemy_text_to_sql_url is not None
+        ),
         disable_thinking=settings.agent_disable_thinking,
         intent_model=(
             settings.agent_intent_model or settings.deepseek_agent_model
@@ -228,6 +248,39 @@ def _chat() -> DeepSeekChatClient:
     )
 
 
+def _text_to_sql_settings() -> TextToSqlSettings:
+    settings = get_settings()
+    return TextToSqlSettings(
+        model=settings.text_to_sql_model_name,
+        temperature=settings.text_to_sql_temperature,
+        max_tokens=settings.text_to_sql_max_tokens,
+        max_attempts=settings.text_to_sql_max_attempts,
+        max_rows=settings.text_to_sql_max_rows,
+        writer_rows=settings.text_to_sql_writer_rows,
+        statement_timeout_ms=settings.text_to_sql_statement_timeout_ms,
+        max_joins=settings.text_to_sql_max_joins,
+        max_ast_depth=settings.text_to_sql_max_ast_depth,
+        max_ctes=settings.text_to_sql_max_ctes,
+        max_union_branches=settings.text_to_sql_max_union_branches,
+        max_result_chars=settings.text_to_sql_max_result_chars,
+    )
+
+
+def _text_to_sql_gateway(
+    engine: AsyncEngine,
+) -> TextToSqlToolAdapter:
+    return TextToSqlToolAdapter(
+        TextToSqlUseCase(
+            chat=_chat(),
+            validator=SqlGlotValidator(),
+            executor=SqlAlchemyReadOnlyExecutor(engine),
+            metrics=SqlMetricBuilder(),
+            catalog=CATALOG,
+            settings=_text_to_sql_settings(),
+        )
+    )
+
+
 def _context_port(session: AsyncSession) -> MessageAgentContextAdapter:
     return MessageAgentContextAdapter(
         messages=SqlAlchemyMessageRepository(session),
@@ -239,61 +292,83 @@ def _context_port(session: AsyncSession) -> MessageAgentContextAdapter:
 
 async def _process(message_id: int) -> None:
     settings = get_settings()
-    async with _session() as session:
-        messages = SqlAlchemyMessageRepository(session)
-        conversations = SqlAlchemyConversationRepository(session)
-        customers = SqlAlchemyCustomerRepository(session)
-        queue = CeleryConversationQueue()
-        context = MessageAgentContextAdapter(
-            messages=messages,
-            conversations=conversations,
-            customers=customers,
-            queue=queue,
-        )
-        search = SearchKnowledgeUseCase(
-            embedder=JinaEmbeddingProvider(
-                api_key=(
-                    settings.jina_api_key.get_secret_value()
-                    if settings.jina_api_key
-                    else ""
+    text_to_sql_engine: AsyncEngine | None = None
+    text_to_sql = None
+    try:
+        if settings.agent_text_to_sql_enabled:
+            url = settings.sqlalchemy_text_to_sql_url
+            if url is None:
+                logger.warning(
+                    "AGENT_TEXT_TO_SQL_ENABLED is true but the read-only "
+                    "Text-to-SQL database URL is not configured"
+                )
+            else:
+                text_to_sql_engine = create_async_engine(
+                    url,
+                    poolclass=NullPool,
+                    connect_args={"timeout": settings.db_connect_timeout},
+                )
+                text_to_sql = _text_to_sql_gateway(text_to_sql_engine)
+
+        async with _session() as session:
+            messages = SqlAlchemyMessageRepository(session)
+            conversations = SqlAlchemyConversationRepository(session)
+            customers = SqlAlchemyCustomerRepository(session)
+            queue = CeleryConversationQueue()
+            context = MessageAgentContextAdapter(
+                messages=messages,
+                conversations=conversations,
+                customers=customers,
+                queue=queue,
+            )
+            search = SearchKnowledgeUseCase(
+                embedder=JinaEmbeddingProvider(
+                    api_key=(
+                        settings.jina_api_key.get_secret_value()
+                        if settings.jina_api_key
+                        else ""
+                    ),
+                    base_url=settings.jina_base_url,
+                    model=settings.jina_embedding_model,
+                    dimensions=settings.jina_embedding_dimensions,
+                    timeout=settings.jina_timeout,
+                    max_retries=settings.jina_max_retries,
+                    rpm=settings.jina_rpm,
+                    tpm=settings.jina_tpm,
                 ),
-                base_url=settings.jina_base_url,
-                model=settings.jina_embedding_model,
-                dimensions=settings.jina_embedding_dimensions,
-                timeout=settings.jina_timeout,
-                max_retries=settings.jina_max_retries,
-                rpm=settings.jina_rpm,
-                tpm=settings.jina_tpm,
-            ),
-            repository=SqlAlchemyKnowledgeSearchRepository(session),
-            settings=KnowledgeSearchSettings(
-                vector_top_k=settings.retrieval_vector_top_k,
-                lexical_top_k=settings.retrieval_lexical_top_k,
-                rrf_k=settings.retrieval_rrf_k,
-                final_k=settings.retrieval_final_k,
-                context_max_tokens=settings.retrieval_context_max_tokens,
-            ),
-        )
-        orders = SqlAlchemyOrderGateway(session)
-        complaints = ComplaintGatewayAdapter(
-            use_case=RegisterComplaintUseCase(
-                repository=SqlAlchemyComplaintRepository(session),
-                handoff=RepositoryConversationHandoff(conversations),
-            ),
-            orders=orders,
-        )
-        use_case = ProcessMessageUseCase(
-            context_port=context,
-            chat=_chat(),
-            counter=AgentTokenCounter(),
-            retriever=DocumentsKnowledgeRetriever(search),
-            catalog=SqlAlchemyCatalogGateway(session),
-            orders=orders,
-            complaints=complaints,
-            traces=SqlAlchemyTraceRepository(session),
-            settings=_agent_settings(),
-        )
-        await use_case.execute(message_id)
+                repository=SqlAlchemyKnowledgeSearchRepository(session),
+                settings=KnowledgeSearchSettings(
+                    vector_top_k=settings.retrieval_vector_top_k,
+                    lexical_top_k=settings.retrieval_lexical_top_k,
+                    rrf_k=settings.retrieval_rrf_k,
+                    final_k=settings.retrieval_final_k,
+                    context_max_tokens=settings.retrieval_context_max_tokens,
+                ),
+            )
+            orders = SqlAlchemyOrderGateway(session)
+            complaints = ComplaintGatewayAdapter(
+                use_case=RegisterComplaintUseCase(
+                    repository=SqlAlchemyComplaintRepository(session),
+                    handoff=RepositoryConversationHandoff(conversations),
+                ),
+                orders=orders,
+            )
+            use_case = ProcessMessageUseCase(
+                context_port=context,
+                chat=_chat(),
+                counter=AgentTokenCounter(),
+                retriever=DocumentsKnowledgeRetriever(search),
+                catalog=SqlAlchemyCatalogGateway(session),
+                orders=orders,
+                complaints=complaints,
+                traces=SqlAlchemyTraceRepository(session),
+                settings=_agent_settings(),
+                text_to_sql=text_to_sql,
+            )
+            await use_case.execute(message_id)
+    finally:
+        if text_to_sql_engine is not None:
+            await text_to_sql_engine.dispose()
 
 
 async def _release(message_id: int) -> None:

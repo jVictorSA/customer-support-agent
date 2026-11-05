@@ -44,6 +44,45 @@ def test_builds_rabbitmq_url_and_honors_override() -> None:
     assert override.rabbitmq_url == "amqp://managed:5672//"
 
 
+def test_builds_text_to_sql_url_from_components() -> None:
+    settings = Settings(
+        postgres_host="db",
+        postgres_port=5432,
+        postgres_db="app_db",
+        text_to_sql_db_user="reader",
+        text_to_sql_db_password="secret",
+    )
+
+    url = settings.sqlalchemy_text_to_sql_url
+
+    assert url is not None
+    assert url.username == "reader"
+    assert url.password == "secret"
+    assert url.host == "db"
+    assert url.database == "app_db"
+
+
+def test_text_to_sql_url_is_none_without_password() -> None:
+    settings = Settings(text_to_sql_db_password="")
+
+    assert settings.sqlalchemy_text_to_sql_url is None
+
+
+def test_text_to_sql_url_override_wins() -> None:
+    settings = Settings(
+        postgres_host="ignored",
+        text_to_sql_database_url=(
+            "postgresql+asyncpg://reader:secret@managed:5432/app_db"
+        ),
+    )
+
+    url = settings.sqlalchemy_text_to_sql_url
+
+    assert url is not None
+    assert url.host == "managed"
+    assert url.username == "reader"
+
+
 def test_explicit_database_url_overrides_components() -> None:
     settings = Settings(
         postgres_user="ignored",

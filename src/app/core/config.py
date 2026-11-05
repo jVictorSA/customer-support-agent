@@ -102,6 +102,23 @@ class Settings(BaseSettings):
     agent_text_to_sql_enabled: bool = False
     agent_disable_thinking: bool = True
 
+    # Text-to-SQL ---------------------------------------------------------
+    text_to_sql_db_user: str = "text_to_sql_reader"
+    text_to_sql_db_password: SecretStr | None = None
+    text_to_sql_database_url: str | None = None
+    text_to_sql_model: str | None = None
+    text_to_sql_temperature: float = 0.0
+    text_to_sql_max_tokens: int = 900
+    text_to_sql_max_attempts: int = 2
+    text_to_sql_max_rows: int = 50
+    text_to_sql_writer_rows: int = 20
+    text_to_sql_statement_timeout_ms: int = 5000
+    text_to_sql_max_joins: int = 4
+    text_to_sql_max_ast_depth: int = 30
+    text_to_sql_max_ctes: int = 3
+    text_to_sql_max_union_branches: int = 2
+    text_to_sql_max_result_chars: int = 6000
+
     agent_intent_model: str | None = None
     agent_orchestrator_model: str | None = None
     agent_rewriter_model: str | None = None
@@ -136,6 +153,7 @@ class Settings(BaseSettings):
     @field_validator(
         "jina_api_key",
         "deepseek_api_key",
+        "text_to_sql_db_password",
         mode="before",
     )
     @classmethod
@@ -160,6 +178,26 @@ class Settings(BaseSettings):
             port=self.postgres_port,
             database=self.postgres_db,
         )
+
+    @property
+    def sqlalchemy_text_to_sql_url(self) -> URL | None:
+        """Return the read-only Text-to-SQL URL, or ``None`` when unset."""
+        if self.text_to_sql_database_url:
+            return make_url(self.text_to_sql_database_url)
+        if self.text_to_sql_db_password is None:
+            return None
+        return URL.create(
+            drivername="postgresql+asyncpg",
+            username=self.text_to_sql_db_user,
+            password=self.text_to_sql_db_password.get_secret_value(),
+            host=self.postgres_host,
+            port=self.postgres_port,
+            database=self.postgres_db,
+        )
+
+    @property
+    def text_to_sql_model_name(self) -> str:
+        return self.text_to_sql_model or self.deepseek_model
 
     @property
     def rabbitmq_url(self) -> str:

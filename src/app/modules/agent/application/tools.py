@@ -9,6 +9,7 @@ from app.modules.agent.application.interfaces import (
     ComplaintGateway,
     KnowledgeRetriever,
     OrderGateway,
+    TextToSqlGateway,
 )
 from app.modules.agent.domain.context import HistoryMessage
 from app.modules.agent.domain.settings import AgentRuntimeSettings
@@ -116,7 +117,10 @@ def tool_definitions(*, text_to_sql_enabled: bool) -> list[dict[str, Any]]:
         definitions.append(
             _function(
                 "text_to_sql",
-                "Consulta dados operacionais via SQL (temporariamente desabilitado).",
+                "Responde perguntas analíticas e consultas complexas sobre "
+                "catálogo, estoque, promoções e os pedidos do próprio cliente. "
+                "Use para contagens, somas, médias, rankings, comparações e "
+                "buscas por características técnicas ou marca.",
                 {"question": {"type": "string"}},
                 ["question"],
             )
@@ -135,6 +139,7 @@ class StoreToolExecutor:
         complaints: ComplaintGateway,
         trace: AgentTraceRecorder,
         settings: AgentRuntimeSettings,
+        text_to_sql: TextToSqlGateway | None = None,
     ) -> None:
         self._rewriter = rewriter
         self._retriever = retriever
@@ -143,11 +148,15 @@ class StoreToolExecutor:
         self._complaints = complaints
         self._trace = trace
         self._settings = settings
+        self._text_to_sql = text_to_sql
 
     @property
     def definitions(self) -> list[dict[str, Any]]:
         return tool_definitions(
-            text_to_sql_enabled=self._settings.text_to_sql_enabled
+            text_to_sql_enabled=(
+                self._settings.text_to_sql_enabled
+                and self._text_to_sql is not None
+            )
         )
 
     async def execute(
@@ -181,7 +190,7 @@ class StoreToolExecutor:
             agent_name="orchestrator",
             tool_name=name,
             arguments=arguments,
-            output=result.to_payload(),
+            output=result.trace_payload or result.to_payload(),
             latency_ms=elapsed_ms(started),
             error_code=result.error_code,
         )
@@ -332,13 +341,22 @@ class StoreToolExecutor:
             )
 
         if name == "text_to_sql":
-            return ToolResult(
-                ok=False,
-                error_code="not_implemented",
-                error_message=(
-                    "A consulta SQL ainda não está disponível. Use as "
-                    "ferramentas estruturadas de catálogo e pedidos."
-                ),
+            if self._text_to_sql is None:
+                return ToolResult(
+                    ok=False,
+                    error_code="text_to_sql_unavailable",
+                    error_message=(
+                        "A consulta SQL não está disponível neste ambiente. "
+                        "Use as ferramentas estruturadas de catálogo e pedidos."
+                    ),
+                )
+            question = str(arguments.get("question") or "").strip()
+            if not question:
+                return _error("invalid_arguments", "question is required")
+            return await self._text_to_sql.answer(
+                question=question,
+                history=history,
+                scope=scope,
             )
 
         return _error("unknown_tool", f"Unknown tool: {name}")

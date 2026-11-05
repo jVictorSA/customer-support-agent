@@ -41,14 +41,46 @@ class GroundingValidator:
                     "get_product_details",
                     "list_my_orders",
                     "get_order_status",
+                    "text_to_sql",
                 }
                 for result in outcome.tool_results
             )
             if not has_data:
                 errors.append(
                     "a pergunta exige dado operacional, mas nenhuma consulta "
-                    "de catálogo ou pedido foi concluída"
+                    "de catálogo, pedido ou SQL foi concluída"
                 )
+
+        if intent.primary_intent.value == "analytics":
+            sql_results = [
+                result
+                for result in outcome.tool_results
+                if result.ok and result.tool_name == "text_to_sql"
+            ]
+            if not sql_results:
+                errors.append(
+                    "a pergunta é analítica, mas a consulta SQL não foi "
+                    "concluída"
+                )
+            else:
+                answered = [
+                    result
+                    for result in sql_results
+                    if isinstance(result.data, dict)
+                    and result.data.get("status") == "answered"
+                ]
+                sql_references = {
+                    citation.reference
+                    for result in answered
+                    for citation in result.citations
+                }
+                if answered and not any(
+                    citation.reference in sql_references
+                    for citation in answer.citations
+                ):
+                    errors.append(
+                        "a resposta analítica deve citar o resultado SQL"
+                    )
 
         if intent.primary_intent.value == "policy":
             has_knowledge = any(
