@@ -1,8 +1,8 @@
 # Exemplos de interação
 
 Conversas de exemplo com o agente da Empório da Música. Os dados operacionais
-usados são os CSVs de demonstração (`import-csv data/ --truncate`) e o cliente
-autenticado é o cliente `1` (Lucas Mendes).
+usados são os CSVs de demonstração (`import-csv samples/data/ --truncate`) e o
+cliente autenticado é o cliente `1` (Lucas Mendes).
 
 ## 1. Catálogo por faixa de preço
 

@@ -42,6 +42,7 @@ from app.presentation.exception_handlers import (
     register_exception_handlers,
 )
 from app.presentation.dev_webhooks import router as dev_webhooks_router
+from app.presentation.openapi import API_DESCRIPTION, TAGS_METADATA
 
 logger = logging.getLogger(__name__)
 
@@ -67,11 +68,15 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(
     title="Customer Support Agent API",
-    description=(
-        "API de agente de atendimento ao cliente para uma loja de instrumentos "
-        "musicais."
-    ),
+    summary="Agente de atendimento da Empório da Música",
+    description=API_DESCRIPTION,
     version="0.1.0",
+    openapi_tags=TAGS_METADATA,
+    contact={
+        "name": "Empório da Música",
+        "url": "https://github.com/jVictorSA/customer-support-agent",
+    },
+    license_info={"name": "Proprietary"},
     lifespan=lifespan,
 )
 

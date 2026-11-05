@@ -81,6 +81,16 @@ when a boundary, transaction rule, or extension point changes.
   `TextToSqlGateway` protocol. SQL generation/validation/execution never runs in
   the API process. The executor uses a dedicated read-only role, Postgres RLS,
   `SET TRANSACTION READ ONLY`, `statement_timeout` and a hard row limit.
+- Store policy calculations live in
+  `modules/agent/domain/store_policy.py`: business hours, payment options,
+  shipping estimates and return eligibility are pure domain functions. The
+  agent exposes them through deterministic tools and never lets the model
+  calculate these values.
+- Promotion validity uses `promotions.starts_at`/`ends_at` together with
+  `is_active`; the catalog filters by the injected `Clock`. Orders carry
+  `sales_channel` and `delivered_at`, and order items carry the return
+  restriction flags `is_final_sale`, `is_customized` and
+  `is_hygiene_restricted`.
 - `main.py` may import: `presentation`, `db`, and `core`; it must not contain
   business rules.
 - Business behavior belongs in: `domain` (pure rules/value objects) or the

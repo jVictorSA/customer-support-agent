@@ -40,6 +40,9 @@
   the authenticated `customer_id`. `/customers`, `/orders`, catalog routes and
   document ingestion remain without auth in this iteration (documented risk).
 - Response contract:
+  - OpenAPI metadata and tag descriptions live in
+    `presentation/openapi.py`; `main.py` exposes the auth, pagination, error and
+    async-message contracts in the Swagger description.
   - Every route declares an explicit `response_model`; never return ORM models.
   - Status codes must reflect the real result. `/health/db` returns `200` when
     the database is reachable and `503` with `status="degraded"` and
@@ -81,9 +84,11 @@
 - Document ingestion configuration: `DOCUMENTS_*` for limits/chunking/OCR,
   `MINIO_*`, `RABBITMQ_*`/`CELERY_*`, `JINA_*` and `DEEPSEEK_*`. Jina/DeepSeek
   keys are `SecretStr` and must be present only in the runtime environment.
-- Conversation configuration: `AUTH_*`, `AGENT_*`, `RETRIEVAL_*` and
-  `CONVERSATION_WEBHOOK_*`. JWT and webhook secrets are `SecretStr`; deploy env
-  files keep fictitious values only.
+- Conversation configuration: `AUTH_*`, `AGENT_*`, `RETRIEVAL_*`,
+  `CONVERSATION_WEBHOOK_*` and `STORE_*`. `STORE_TIMEZONE` controls the local
+  store calendar, `STORE_HOLIDAYS` is a comma-separated ISO date list and
+  `STORE_METRO_CEP_PREFIXES` feeds the shipping estimate. JWT and webhook
+  secrets are `SecretStr`; deploy env files keep fictitious values only.
 - Text-to-SQL configuration: `AGENT_TEXT_TO_SQL_ENABLED` is the feature flag;
   `TEXT_TO_SQL_DB_USER`/`TEXT_TO_SQL_DB_PASSWORD` build the read-only URL and
   `TEXT_TO_SQL_DATABASE_URL` is an optional override. `TEXT_TO_SQL_*` controls
@@ -101,8 +106,9 @@
     tolerates failure and starts in degraded mode; `/health/db` then returns 503.
   - Alembic migrations are manual and never run at startup.
   - Bulk data is loaded with `import-csv <directory>` (or
-    `docker compose exec api import-csv <directory>`), never at startup. `data/`
-    is ignored by Git; the importer upserts by primary key and resets sequences.
+    `docker compose exec api import-csv <directory>`), never at startup.
+    `samples/data/` is the versioned demo dataset; `data/` remains ignored. The
+    importer upserts by primary key and resets sequences.
   - Compose adds `rabbitmq`, `minio`, `minio-init`, `worker` and `agent-worker`.
     The ingestion worker uses the `worker-runtime`/`worker-dev` image targets and
     consumes `documents.ingest`. The chat worker uses the lightweight

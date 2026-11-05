@@ -11,6 +11,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -21,6 +22,7 @@ from app.modules.orders.domain.order_status import OrderStatus
 from app.modules.orders.domain.payment_method import (
     PaymentMethod,
 )
+from app.modules.orders.domain.sales_channel import SalesChannel
 
 
 class OrderModel(TimestampMixin, Base):
@@ -58,8 +60,20 @@ class OrderModel(TimestampMixin, Base):
         ),
         nullable=False,
     )
+    sales_channel: Mapped[SalesChannel | None] = mapped_column(
+        Enum(
+            SalesChannel,
+            name="sales_channel",
+            native_enum=True,
+            values_callable=lambda enum: [member.value for member in enum],
+        ),
+        nullable=True,
+    )
     tracking_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
     estimated_delivery: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    delivered_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -87,8 +101,10 @@ class OrderModel(TimestampMixin, Base):
             status=self.status,
             total_brl=self.total_brl,
             payment_method=self.payment_method,
+            sales_channel=self.sales_channel,
             tracking_code=self.tracking_code,
             estimated_delivery=self.estimated_delivery,
+            delivered_at=self.delivered_at,
             notes=self.notes,
             items=items,
             created_at=self.created_at,
@@ -111,6 +127,15 @@ class OrderItemModel(TimestampMixin, Base):
         primary_key=True,
     )
     quantity: Mapped[int] = mapped_column(nullable=False)
+    is_final_sale: Mapped[bool] = mapped_column(
+        nullable=False, default=False, server_default=text("false")
+    )
+    is_customized: Mapped[bool] = mapped_column(
+        nullable=False, default=False, server_default=text("false")
+    )
+    is_hygiene_restricted: Mapped[bool] = mapped_column(
+        nullable=False, default=False, server_default=text("false")
+    )
 
     order: Mapped[OrderModel] = relationship(back_populates="items")
     product: Mapped["ProductModel"] = relationship()
@@ -121,4 +146,7 @@ class OrderItemModel(TimestampMixin, Base):
             product_id=self.product_id,
             quantity=self.quantity,
             product_name=product.name if product is not None else None,
+            is_final_sale=self.is_final_sale,
+            is_customized=self.is_customized,
+            is_hygiene_restricted=self.is_hygiene_restricted,
         )

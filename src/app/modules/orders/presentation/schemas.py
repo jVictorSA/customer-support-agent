@@ -8,12 +8,16 @@ from app.modules.orders.domain.order_status import OrderStatus
 from app.modules.orders.domain.payment_method import (
     PaymentMethod,
 )
+from app.modules.orders.domain.sales_channel import SalesChannel
 
 
 class OrderItemResponse(BaseModel):
     product_id: int
     quantity: int
     product_name: str | None
+    is_final_sale: bool
+    is_customized: bool
+    is_hygiene_restricted: bool
 
     @classmethod
     def from_domain(cls, item: OrderItem) -> "OrderItemResponse":
@@ -21,6 +25,9 @@ class OrderItemResponse(BaseModel):
             product_id=item.product_id,
             quantity=item.quantity,
             product_name=item.product_name,
+            is_final_sale=item.is_final_sale,
+            is_customized=item.is_customized,
+            is_hygiene_restricted=item.is_hygiene_restricted,
         )
 
 
@@ -31,8 +38,10 @@ class OrderSummaryResponse(BaseModel):
     status: OrderStatus
     total_brl: float
     payment_method: PaymentMethod
+    sales_channel: SalesChannel | None
     tracking_code: str | None
     estimated_delivery: datetime | None
+    delivered_at: datetime | None
     notes: str | None
     created_at: datetime
     updated_at: datetime
@@ -49,8 +58,10 @@ class OrderSummaryResponse(BaseModel):
             status=order.status,
             total_brl=float(order.total_brl),
             payment_method=order.payment_method,
+            sales_channel=order.sales_channel,
             tracking_code=order.tracking_code,
             estimated_delivery=order.estimated_delivery,
+            delivered_at=order.delivered_at,
             notes=order.notes,
             created_at=order.created_at,
             updated_at=order.updated_at,

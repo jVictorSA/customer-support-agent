@@ -21,6 +21,7 @@ from app.modules.orders.domain.order_status import OrderStatus
 from app.modules.orders.domain.payment_method import (
     PaymentMethod,
 )
+from app.modules.orders.domain.sales_channel import SalesChannel
 from app.modules.orders.infrastructure.models import (
     OrderItemModel,
     OrderModel,
@@ -232,9 +233,15 @@ class CsvImporter:
                     "payment_method": PaymentMethod(
                         self._required(row, "payment_method")
                     ),
+                    "sales_channel": self._optional_enum(
+                        row, "sales_channel", SalesChannel
+                    ),
                     "tracking_code": self._optional(row, "tracking_code"),
                     "estimated_delivery": self._optional_datetime(
                         row, "estimated_delivery"
+                    ),
+                    "delivered_at": self._optional_datetime(
+                        row, "delivered_at"
                     ),
                     "notes": self._optional(row, "notes"),
                     "created_at": self._timestamp(row, "created_at"),
@@ -252,8 +259,10 @@ class CsvImporter:
                 "status",
                 "total_brl",
                 "payment_method",
+                "sales_channel",
                 "tracking_code",
                 "estimated_delivery",
+                "delivered_at",
                 "notes",
             ),
         )
@@ -271,6 +280,15 @@ class CsvImporter:
                     "order_id": self._int(row, "order_id"),
                     "quantity": self._int(row, "quantity"),
                     "product_id": self._int(row, "product_id"),
+                    "is_final_sale": self._optional_bool(
+                        row, "is_final_sale", default=False
+                    ),
+                    "is_customized": self._optional_bool(
+                        row, "is_customized", default=False
+                    ),
+                    "is_hygiene_restricted": self._optional_bool(
+                        row, "is_hygiene_restricted", default=False
+                    ),
                     "created_at": self._timestamp(row, "created_at"),
                     "updated_at": self._timestamp(row, "updated_at"),
                 }
@@ -280,7 +298,12 @@ class CsvImporter:
             OrderItemModel,
             rows,
             primary_key=("order_id", "product_id"),
-            update_columns=("quantity",),
+            update_columns=(
+                "quantity",
+                "is_final_sale",
+                "is_customized",
+                "is_hygiene_restricted",
+            ),
         )
 
     async def _import_promotions(
@@ -303,6 +326,8 @@ class CsvImporter:
                     "discount_percent": self._int(row, "discount_percent"),
                     "description": self._optional(row, "description"),
                     "is_active": self._bool(row, "is_active"),
+                    "starts_at": self._optional_datetime(row, "starts_at"),
+                    "ends_at": self._optional_datetime(row, "ends_at"),
                     "created_at": self._timestamp(row, "created_at"),
                     "updated_at": self._timestamp(row, "updated_at"),
                 }
@@ -317,6 +342,8 @@ class CsvImporter:
                 "discount_percent",
                 "description",
                 "is_active",
+                "starts_at",
+                "ends_at",
             ),
         )
 
@@ -407,6 +434,28 @@ class CsvImporter:
         raise CsvImportError(
             f"Column {column!r} must be a boolean, got {value!r}"
         )
+
+    def _optional_bool(
+        self,
+        row: dict[str, str],
+        column: str,
+        *,
+        default: bool,
+    ) -> bool:
+        if not row.get(column, "").strip():
+            return default
+        return self._bool(row, column)
+
+    def _optional_enum(
+        self,
+        row: dict[str, str],
+        column: str,
+        enum_type: type[Any],
+    ) -> Any:
+        value = self._optional(row, column)
+        if value is None:
+            return None
+        return enum_type(value)
 
     def _json(
         self,

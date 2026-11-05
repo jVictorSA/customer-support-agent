@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Protocol
 
 from app.modules.agent.domain.chat import ChatCompletion
@@ -15,6 +16,10 @@ from app.modules.agent.domain.results import (
     RegisteredComplaint,
     ToolResult,
 )
+
+
+class Clock(Protocol):
+    def now(self) -> datetime: ...
 
 
 class ChatModel(Protocol):

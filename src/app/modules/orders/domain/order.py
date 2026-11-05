@@ -7,6 +7,7 @@ from app.modules.orders.domain.order_status import OrderStatus
 from app.modules.orders.domain.payment_method import (
     PaymentMethod,
 )
+from app.modules.orders.domain.sales_channel import SalesChannel
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +21,8 @@ class Order:
     tracking_code: str | None
     estimated_delivery: datetime | None
     notes: str | None
+    sales_channel: SalesChannel | None = None
+    delivered_at: datetime | None = None
     items: tuple[OrderItem, ...] = ()
     created_at: datetime | None = None
     updated_at: datetime | None = None

@@ -1,0 +1,21 @@
+order_id,customer_id,order_date,status,total_brl,payment_method,tracking_code,estimated_delivery,sales_channel,delivered_at,notes
+1,3,2025-10-15,delivered,11499,pix,BRAB1234567BR,2025-10-25,online,2025-10-19T12:00:00+00:00,
+2,7,2025-11-02,delivered,5999,credit_6x,BRCX9876543BR,2025-11-15,online,2025-11-06T12:00:00+00:00,
+3,12,2025-11-20,delivered,3450,credit_12x,BRDZ4561230BR,2025-12-05,in_store,2025-11-24T12:00:00+00:00,
+4,1,2025-12-10,delivered,799.9,boleto,BRQM7890123BR,2025-12-22,online,2025-12-14T12:00:00+00:00,
+5,5,2026-01-05,delivered,4599,pix,BRTP3456789BR,2026-01-18,online,2026-01-09T12:00:00+00:00,
+6,9,2026-01-18,delivered,7499,credit_12x,BRVN6543210BR,2026-02-01,in_store,2026-01-22T12:00:00+00:00,
+7,14,2026-02-03,delivered,159.9,credit_3x,BRKR1122334BR,2026-02-17,online,2026-02-07T12:00:00+00:00,
+8,2,2026-02-15,shipped,349.9,debit,BRJL5544332BR,2026-02-28,online,,
+9,6,2026-02-20,confirmed,349.9,credit_6x,,,in_store,,
+10,11,2026-02-25,confirmed,8732,pix,,,online,,
+11,4,2026-03-05,confirmed,359,boleto,,,online,,
+12,16,2026-03-10,confirmed,599,credit_3x,,,in_store,,
+13,8,2026-03-12,pending,1899,pix,,,online,,
+14,13,2026-03-15,pending,1749,debit,,,online,,
+15,18,2026-03-18,pending,8348,credit_12x,,,in_store,,
+16,10,2026-03-22,pending,429.9,credit_6x,,,online,,
+17,15,2026-01-28,cancelled,689,pix,,,online,,Pedido cancelado pelo cliente antes do processamento
+18,17,2026-02-08,cancelled,459.9,credit_12x,,,in_store,,Item fora de estoque no momento do pedido
+19,3,2026-02-22,cancelled,7499,boleto,,,online,,Pagamento não confirmado dentro do prazo
+20,7,2026-03-08,cancelled,1400,credit_3x,,,online,,Endereço de entrega inválido informado pelo cliente

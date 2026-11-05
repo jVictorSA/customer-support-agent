@@ -132,6 +132,9 @@ class Settings(BaseSettings):
     agent_rewriter_max_tokens: int = 400
     agent_writer_max_tokens: int = 1200
     agent_tool_result_max_chars: int = 6000
+    store_timezone: str = "America/Sao_Paulo"
+    store_holidays: str = ""
+    store_metro_cep_prefixes: str = "790,791"
 
     retrieval_vector_top_k: int = 20
     retrieval_lexical_top_k: int = 20

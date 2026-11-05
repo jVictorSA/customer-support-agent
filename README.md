@@ -105,6 +105,9 @@ As principais variáveis são:
 | `AGENT_HISTORY_MAX_TOKENS` | Orçamento de tokens do histórico | `6000` |
 | `AGENT_*_MODEL` | Override de modelo por agente (vazio usa `DEEPSEEK_MODEL`) | vazio |
 | `AGENT_TEXT_TO_SQL_ENABLED` | Habilita a tool de text-to-SQL | `false` |
+| `STORE_TIMEZONE` | Fuso usado no status de expediente e regras de data | `America/Sao_Paulo` |
+| `STORE_HOLIDAYS` | Feriados em ISO-8601 separados por vírgula | vazio |
+| `STORE_METRO_CEP_PREFIXES` | Prefixos de CEP da região metropolitana | `790,791` |
 | `TEXT_TO_SQL_DB_USER` | Role read-only usado pelo executor SQL | `text_to_sql_reader` |
 | `TEXT_TO_SQL_DB_PASSWORD` | Senha do role read-only | valor de desenvolvimento |
 | `TEXT_TO_SQL_DATABASE_URL` | URL completa opcional do banco read-only | vazio |
@@ -246,21 +249,25 @@ sem rodar no startup. O comando aceita um diretório com seis arquivos:
 `categories.csv`, `products.csv`, `customers.csv`, `orders.csv`,
 `order_items.csv` e `promotions.csv`.
 
+Há um conjunto fictício versionado em `samples/data/`:
+
 ```bash
 # aplicar a migration antes da primeira carga
 docker compose exec api alembic upgrade head
 
-# importar/atualizar (idempotente, upsert por PK)
-uv run import-csv data/
+# importar/atualizar os dados de demonstração
+uv run import-csv samples/data/
 
 # recarregar do zero
-uv run import-csv data/ --truncate
+uv run import-csv samples/data/ --truncate
 ```
 
+O PDF de políticas usado nos exemplos não é versionado; veja
+[`samples/policies/README.md`](samples/policies/README.md) para o upload.
+
 Os cabeçalhos devem corresponder às colunas do modelo. `specs` é um objeto JSON,
-datas usam ISO-8601 e booleanos aceitam `true/false` ou `0/1`. Os CSVs não são
-versionados; `data/` está no `.gitignore`. A importação inteira roda em uma
-transação e ajusta as sequences após inserir IDs explícitos.
+datas usam ISO-8601 e booleanos aceitam `true/false` ou `0/1`. A importação
+inteira roda em uma transação e ajusta as sequences após inserir IDs explícitos.
 
 ## Ingestão de documentos
 
@@ -322,6 +329,8 @@ agent-worker:
        -> search_store_knowledge (RAG híbrido + rewriter)
        -> search_catalog / get_product_details
        -> list_my_orders / get_order_status (escopo do cliente)
+       -> get_store_status / check_return_eligibility
+       -> calculate_payment_options / estimate_shipping
        -> text_to_sql (métricas e consultas complexas, se habilitado)
        -> register_complaint
   -> response writer + validação de grounding
@@ -346,6 +355,10 @@ Características principais:
   perigosos são recusados deterministicamente antes de qualquer tool ou writer;
 - **grounding**: preços/estoque/status precisam vir de tool; citações inválidas
   disparam reparo e, em último caso, fallback seguro;
+- **regras de loja determinísticas**: horário/expediente, elegibilidade de
+  devolução/troca, cálculo de pagamento e estimativa de frete vêm das tools
+  `get_store_status`, `check_return_eligibility`, `calculate_payment_options` e
+  `estimate_shipping`, nunca de cálculo livre do modelo;
 - **Text-to-SQL**: consultas agregadas e buscas complexas usam um pipeline
   separado, com catálogo semântico, validação SQLGlot, role read-only e RLS por
   cliente; o SQL bruto não é enviado ao redator nem ao cliente;
@@ -668,8 +681,10 @@ cliente é o produto, não o assistente de codificação.
   todas as chamadas e tools são rastreadas.
 - **Retrieval híbrido** com pgvector + FTS português, fusão RRF e expansão
   parent-child, sem reranker nesta fase.
-- **Tools determinísticas para dados operacionais**; text-to-SQL tem contrato
-  reservado, mas permanece desabilitado (`AGENT_TEXT_TO_SQL_ENABLED=false`).
+- **Tools determinísticas para dados operacionais**; text-to-SQL é opt-in
+  (`AGENT_TEXT_TO_SQL_ENABLED`), usa role read-only e RLS, e fica desabilitado
+  por padrão. Regras de horário, devolução, pagamento e frete também são tools
+  determinísticas.
 - **Webhook assinado com HMAC-SHA256**: entrega em task separada, com retries e
   status persistido na mensagem; o receiver `/dev/webhooks/conversation` existe
   apenas em development.
@@ -691,6 +706,10 @@ cliente é o produto, não o assistente de codificação.
   para avaliar, comparar e evoluir prompts, tools e políticas de roteamento.
 - **Canais omnichannel**: adicionar entrada/saída para WhatsApp, web, Messenger
   e Instagram com uma camada comum de conversas e entrega.
+- **Melhorar a documentação Swagger**: documentar todos os endpoints com
+  summaries, descrições, exemplos de request/response e respostas de erro,
+  além de manter o fluxo de autenticação e os contratos assíncronos visíveis no
+  `/docs`.
 - **Testes de LLM/agentes com DeepEval**: medir qualidade de resposta,
   fidelidade às políticas, uso correto de tools e regressões de prompt.
 - **Reduzir a imagem do ingestion worker**: hoje ela chega a ~11 GB no target de
@@ -712,6 +731,13 @@ cliente é o produto, não o assistente de codificação.
   configurado); a política de retenção LGPD desses traces ainda é uma fase
   futura.
 - Sem reranker, sumarização de histórico ou memória semântica de mensagens.
+- A devolução/troca implementa elegibilidade e orientação; ainda não persiste
+  uma solicitação formal nem acompanha o fluxo de aprovação.
+- Fora da região metropolitana de Campo Grande, o frete retorna as modalidades
+  e prazos, mas exige cotação por CEP/peso/dimensões; não há integração com
+  Correios ou Jadlog.
+- A validade de promoção depende de `starts_at`/`ends_at`; promoções antigas
+  sem essas datas continuam sendo tratadas como sem limite de vigência.
 - Os traces guardam prompts e conteúdo de conversa (dados sensíveis) em tabelas
   internas; a política completa de LGPD/retenção fica para uma próxima fase.
 - A validação de URL do webhook bloqueia hosts privados em hml/prod, mas não

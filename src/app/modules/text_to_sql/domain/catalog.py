@@ -246,8 +246,20 @@ _TABLES: tuple[TableSpec, ...] = (
             ColumnSpec(
                 "is_active",
                 "boolean",
-                "Indica se a promoção está vigente.",
-                aliases=("ativa", "vigente"),
+                "Indica se a promoção está habilitada.",
+                aliases=("ativa", "habilitada"),
+            ),
+            ColumnSpec(
+                "starts_at",
+                "timestamptz",
+                "Início da vigência da promoção, quando informado.",
+                aliases=("início", "data de início"),
+            ),
+            ColumnSpec(
+                "ends_at",
+                "timestamptz",
+                "Fim da vigência da promoção, quando informado.",
+                aliases=("fim", "data de fim", "validade"),
             ),
         ),
         relationships=(
@@ -298,6 +310,12 @@ _TABLES: tuple[TableSpec, ...] = (
                 aliases=("forma de pagamento", "pagamento"),
             ),
             ColumnSpec(
+                "sales_channel",
+                "sales_channel",
+                "online ou in_store.",
+                aliases=("canal", "canal de venda"),
+            ),
+            ColumnSpec(
                 "tracking_code",
                 "text",
                 "Código de rastreamento, quando disponível.",
@@ -308,6 +326,12 @@ _TABLES: tuple[TableSpec, ...] = (
                 "timestamptz",
                 "Previsão de entrega, quando disponível.",
                 aliases=("previsão de entrega", "entrega estimada"),
+            ),
+            ColumnSpec(
+                "delivered_at",
+                "timestamptz",
+                "Data real de recebimento, quando disponível.",
+                aliases=("data de recebimento", "entregue em"),
             ),
         ),
         relationships=(
@@ -339,6 +363,24 @@ _TABLES: tuple[TableSpec, ...] = (
                 "integer",
                 "Quantidade comprada.",
                 aliases=("quantidade",),
+            ),
+            ColumnSpec(
+                "is_final_sale",
+                "boolean",
+                "Item de liquidação com venda final.",
+                aliases=("venda final", "liquidação"),
+            ),
+            ColumnSpec(
+                "is_customized",
+                "boolean",
+                "Item personalizado ou ajustado sob encomenda.",
+                aliases=("personalizado", "sob encomenda"),
+            ),
+            ColumnSpec(
+                "is_hygiene_restricted",
+                "boolean",
+                "Item com restrição de higiene para troca.",
+                aliases=("higiene", "boquilha"),
             ),
         ),
         relationships=(

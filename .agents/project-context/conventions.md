@@ -146,6 +146,17 @@ must state why it is expected and the evidence source.
   in depth, not the only control. Evidence:
   `modules/text_to_sql/infrastructure/sql/`,
   `alembic/versions/a7b8c9d0e1f2_enable_text_to_sql_rls.py`.
+- **Deterministic store policy tools** — hours, payment, shipping and return
+  eligibility are pure `domain/store_policy.py` functions exposed as tools; the
+  model never calculates these values. Evidence:
+  `modules/agent/domain/store_policy.py`, `modules/agent/application/tools.py`.
+- **Promotion validity is data, not only a flag** — `is_active` is combined with
+  `starts_at`/`ends_at` and the catalog uses the injected `Clock`. Evidence:
+  `modules/promotions/infrastructure/models.py`,
+  `modules/agent/infrastructure/tools/catalog.py`.
+- **Versioned demo data lives in `samples/`** — `data/` remains Git-ignored;
+  `samples/data/` is the reproducible demo set. Evidence: `.gitignore`,
+  `README.md`, `samples/data/`.
 - **Static Text-to-SQL catalog** — the small schema is sent whole to the model;
   metrics are deterministic templates and the catalog has a drift test. Evidence:
   `modules/text_to_sql/domain/catalog.py`,
