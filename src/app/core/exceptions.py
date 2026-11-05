@@ -32,3 +32,19 @@ class ConflictError(AppError):
     code = "conflict"
     message = "Resource conflict"
     status_code = 409
+
+
+class AuthenticationError(AppError):
+    """Base class for a missing, invalid or expired credential."""
+
+    code = "authentication_error"
+    message = "Authentication required"
+    status_code = 401
+
+
+class AuthorizationError(AppError):
+    """Base class for an authenticated caller without access."""
+
+    code = "authorization_error"
+    message = "Access denied"
+    status_code = 403
