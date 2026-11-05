@@ -60,8 +60,9 @@ async def integration_session(
         async with db_session.begin():
             await db_session.execute(
                 text(
-                    "TRUNCATE TABLE order_items, promotions, orders, "
-                    "products, categories, customers RESTART IDENTITY CASCADE"
+                    "TRUNCATE TABLE document_chunks, document_sections, "
+                    "documents, order_items, promotions, orders, products, "
+                    "categories, customers RESTART IDENTITY CASCADE"
                 )
             )
         yield db_session

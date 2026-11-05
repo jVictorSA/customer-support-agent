@@ -14,6 +14,11 @@ when a boundary, transaction rule, or extension point changes.
   error handler and pagination contract.
 - `src/app/infrastructure/importing/` and
   `src/app/cli/` — CSV import adapter and command entrypoint.
+- `src/app/modules/documents/` — four-layer document ingestion module
+  (Docling, MinIO, Jina, DeepSeek and Celery adapters live in
+  `infrastructure`).
+- `src/app/worker.py` — Celery worker composition root; it creates its own async
+  engine/session per task instead of reusing the API request session.
 - `src/app/db/session.py` — session-per-request and
   transaction ownership.
 - `src/app/db/base.py` and
@@ -50,6 +55,12 @@ when a boundary, transaction rule, or extension point changes.
 - Shared `infrastructure/importing/` is a cross-module adapter for bulk CSV
   loading; it may import ORM models and `db.session`. `cli/` is a thin command
   entrypoint over that adapter.
+- `modules/documents/` owns the ingestion pipeline; provider SDKs (Docling,
+  MinIO, Jina, DeepSeek, Celery) stay in its `infrastructure` layer.
+  `worker.py` is a composition root like `main.py`; it may import
+  `infrastructure`, `application` and `core`, never `presentation`.
+- The API and worker use separate images/deployments. The API image does not
+  install Docling/Tesseract; the worker image does. Scale them independently.
 - `main.py` may import: `presentation`, `db`, and `core`; it must not contain
   business rules.
 - Business behavior belongs in: `domain` (pure rules/value objects) or the
@@ -109,8 +120,17 @@ when a boundary, transaction rule, or extension point changes.
   single transaction, upserts by primary key, preserves `created_at` on updates
   and resets integer sequences after loading explicit IDs. Evidence:
   `infrastructure/importing/csv_importer.py`, `cli/import_csv.py`.
+- Document ingestion tables follow the same conventions (integer `Identity`
+  PKs, `TimestampMixin`) and add a `public_id` UUID exposed by the API.
+  `document_sections.path` is `ltree`; `document_chunks.embedding` is
+  `vector(1024)`. HNSW, GiST and GIN indexes are created by the migration.
+- `documents` is the ingestion aggregate; `web`/retrieval must filter
+  `deleted_at IS NULL`, `is_enabled = true` and `status = 'completed'`.
+- `AppError` now carries `status_code` (default 400); the shared handler uses it
+  directly. 404/409 subclasses keep their existing statuses.
 - Open decisions (do not invent them silently): authentication/authorization,
-  lint/format/type-check/CI tooling, and the full error catalog beyond 404/409/400.
+  lint/format/type-check/CI tooling, and the full error catalog beyond the
+  statuses currently implemented (400/404/409/413/415/422/503).
 
 ## Extension points
 

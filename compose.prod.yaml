@@ -9,6 +9,25 @@ services:
       - ${ENV_FILE:-deploy/.env.prod}
     restart: unless-stopped
 
+  rabbitmq:
+    env_file:
+      - ${ENV_FILE:-deploy/.env.prod}
+    restart: unless-stopped
+
+  minio:
+    env_file:
+      - ${ENV_FILE:-deploy/.env.prod}
+    restart: unless-stopped
+
+  worker:
+    env_file:
+      - ${ENV_FILE:-deploy/.env.prod}
+    restart: unless-stopped
+
 volumes:
   postgres_data:
     name: ${POSTGRES_VOLUME_NAME:-customer_support_agent_postgres_data_prod}
+  rabbitmq_data:
+    name: ${RABBITMQ_VOLUME_NAME:-customer_support_agent_rabbitmq_data_prod}
+  minio_data:
+    name: ${MINIO_VOLUME_NAME:-customer_support_agent_minio_data_prod}

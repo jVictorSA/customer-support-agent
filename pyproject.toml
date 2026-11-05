@@ -27,8 +27,13 @@ classifiers = [
 dependencies = [
     "alembic>=1.20.1",
     "asyncpg>=0.32.0",
+    "celery>=5.5.3",
     "fastapi[standard]>=0.162.0",
+    "minio>=7.2.16",
+    "pgvector>=0.4.2",
     "pydantic-settings>=2.16.2",
+    "pypdf>=6.1.1",
+    "python-multipart>=0.0.20",
     "sqlalchemy[asyncio]>=2.1.8",
     "uvicorn[standard]>=0.54.0",
 ]
@@ -44,6 +49,15 @@ dev = [
     "httpx>=0.28.1",
     "pytest>=8.4.0",
     "pytest-asyncio>=1.4.1.post1",
+]
+# Installed only by the ingestion worker image / integration runs:
+#   uv sync --group worker
+worker = [
+    "docling>=2.143.1",
+    "httpx>=0.28.1",
+    "openai>=1.109.1",
+    "pymupdf>=1.26.4",
+    "tiktoken>=0.12.0",
 ]
 
 [build-system]
@@ -62,4 +76,13 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [
     "integration: tests that require a running Postgres instance",
+    "provider: opt-in smoke tests that call a real external AI provider",
 ]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }

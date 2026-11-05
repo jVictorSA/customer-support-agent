@@ -1,19 +1,11 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.core.exceptions import (
-    AppError,
-    ConflictError,
-    NotFoundError,
-)
+from app.core.exceptions import AppError
 
 
 def _status_code_for(exc: AppError) -> int:
-    if isinstance(exc, NotFoundError):
-        return 404
-    if isinstance(exc, ConflictError):
-        return 409
-    return 400
+    return exc.status_code
 
 
 async def app_error_handler(_: Request, exc: AppError) -> JSONResponse:

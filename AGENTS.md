@@ -24,11 +24,13 @@ are mandatory.
 ## What this project is
 
 A Python 3.12 FastAPI backend for a customer-support agent for a musical
-instrument store. Postgres 17.11, SQLAlchemy 2.x async (`asyncpg`), Alembic,
-`pydantic-settings`, `uv`, Docker Compose, pytest/pytest-asyncio. Business
-modules `categories`, `products`, `customers`, `orders` and `promotions` are
-implemented with GET-only routes, paginated responses and full CRUD
-repositories. The AI integration is not implemented yet.
+instrument store. Postgres 17 + pgvector, SQLAlchemy 2.x async (`asyncpg`),
+Alembic, `pydantic-settings`, `uv`, Docker Compose, pytest/pytest-asyncio.
+Business modules `categories`, `products`, `customers`, `orders` and
+`promotions` are implemented with GET-only routes, paginated responses and full
+CRUD repositories. Document ingestion is implemented in `modules/documents`
+with MinIO, Celery/RabbitMQ, Docling, DeepSeek summaries and Jina embeddings.
+Retrieval and the conversational agent are not implemented yet.
 
 ## Architecture in one line
 
@@ -45,7 +47,10 @@ uv run pytest
 # Local API + Postgres
 docker compose up --build -d
 docker compose logs -f api
+docker compose logs -f worker
 # API: http://127.0.0.1:8000, docs: http://127.0.0.1:8000/docs
+# MinIO console: http://127.0.0.1:9001
+# RabbitMQ management: http://127.0.0.1:15672
 
 # Integration tests (dedicated test DB, opt-in)
 # The fixture applies `alembic upgrade head` to the test DB automatically.
@@ -81,8 +86,10 @@ separately.
   presentation.
 - Do not expose stack traces, SQL, credentials, prompts, or customer PII in
   HTTP responses. Internal detail only when `APP_ENV=development`.
-- Do not invent open decisions: authentication/authorization, write endpoints,
-  the full error catalog beyond 404/409/400, and lint/CI tooling are still open.
+- Do not invent open decisions: authentication/authorization, write endpoints
+  for the operational business modules, lint/CI tooling, and retrieval/agent
+  behavior are still open. The `/documents` ingestion write surface is
+  intentionally implemented but still unauthenticated.
 - Persistence conventions are fixed: integer `Identity` PKs, `TimestampMixin`,
   `Numeric(12,2)` + `Decimal` for money, native Postgres enums, and
   `order_items` inside the `orders` aggregate.

@@ -141,8 +141,12 @@ Operational data is loaded from six CSVs through `import-csv <directory>`:
 
 - Implemented: ORM models, Alembic initial migration, repositories with CRUD,
   `list`/`get` use cases, GET routes with pagination/filters, shared error
-  handling and the CSV importer.
-- Not implemented: POST/PUT/PATCH/DELETE routes, authentication/authorization,
-  AI/provider integration, and the agent runtime.
+  handling and the CSV importer. Document ingestion is implemented as a
+  separate module (`documents`, `/documents`) with PDF upload, MinIO storage,
+  Celery processing, hierarchical chunks, DeepSeek summaries and Jina
+  embeddings stored in pgvector.
+- Not implemented: POST/PUT/PATCH/DELETE routes for the operational business
+  modules, authentication/authorization, retrieval/hybrid search, reranking,
+  and the conversational agent runtime.
 - The `health` module remains the smallest structural reference; the business
   modules show the full CRUD/pagination pattern.

@@ -2,7 +2,7 @@ name: customer-support-agent
 
 services:
   db:
-    image: postgres:17.11
+    image: pgvector/pgvector:pg17
     environment:
       TZ: UTC
     volumes:
@@ -22,6 +22,8 @@ services:
       target: runtime
     environment:
       POSTGRES_HOST: db
+      MINIO_ENDPOINT: minio:9000
+      RABBITMQ_HOST: rabbitmq
       TZ: UTC
     ports:
       - "${API_PORT:-8000}:8000"
@@ -39,6 +41,89 @@ services:
       retries: 5
       start_period: 10s
 
+  rabbitmq:
+    image: rabbitmq:4.1-management
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-app}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-app}
+      TZ: UTC
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+      TZ: UTC
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -f
+        - http://localhost:9000/minio/health/live
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  minio-init:
+    image: pgsty/mc:RELEASE.2026-10-26T00-00-00Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >
+        mc alias set local http://minio:9000
+        "$${MINIO_ACCESS_KEY}" "$${MINIO_SECRET_KEY}" &&
+        mc mb --ignore-existing "local/$${DOCUMENTS_STORAGE_BUCKET}"
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      DOCUMENTS_STORAGE_BUCKET: ${DOCUMENTS_STORAGE_BUCKET:-rag-documents}
+
+  worker:
+    build:
+      context: .
+      target: worker-runtime
+    command:
+      - celery
+      - -A
+      - app.worker.celery_app
+      - worker
+      - --loglevel=INFO
+      - --concurrency=1
+      - --queues=documents.ingest
+    environment:
+      POSTGRES_HOST: db
+      MINIO_ENDPOINT: minio:9000
+      RABBITMQ_HOST: rabbitmq
+      DOCLING_DEVICE: cpu
+      TZ: UTC
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres_data:
     name: ${POSTGRES_VOLUME_NAME:-customer_support_agent_postgres_data}
+  rabbitmq_data:
+    name: customer_support_agent_rabbitmq_data
+  minio_data:
+    name: customer_support_agent_minio_data
