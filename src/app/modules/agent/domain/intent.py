@@ -9,6 +9,7 @@ class IntentKind(StrEnum):
     POLICY = "policy"
     PRODUCT_SEARCH = "product_search"
     ORDER_STATUS = "order_status"
+    ANALYTICS = "analytics"
     COMPLAINT = "complaint"
     OUT_OF_SCOPE = "out_of_scope"
     SMALLTALK = "smalltalk"

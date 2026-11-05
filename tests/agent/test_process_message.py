@@ -440,6 +440,104 @@ async def test_benign_out_of_scope_skips_orchestrator() -> None:
     assert "orchestrator" not in [step.agent_name for step in trace.steps]
 
 
+class FakeTextToSql:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    async def answer(self, **kwargs):
+        self.calls.append(kwargs)
+        return ToolResult(
+            ok=True,
+            data={
+                "status": "answered",
+                "rows": [{"total_brl": 100.0}],
+                "query_hash": "abc",
+            },
+            citations=(Citation("sql", "sql:abc"),),
+            trace_payload={"status": "answered", "sql": "SELECT 1"},
+        )
+
+
+def _tool_executor(settings: AgentRuntimeSettings, gateway) -> StoreToolExecutor:
+    chat = ScriptedChat([])
+    return StoreToolExecutor(
+        rewriter=QueryRewriter(
+            chat=chat, settings=settings, trace=AgentTraceRecorder(FakeTrace(), 1)
+        ),
+        retriever=FakeRetriever(),
+        catalog=FakeCatalog(),
+        orders=FakeOrders(),
+        complaints=FakeComplaints(),
+        trace=AgentTraceRecorder(FakeTrace(), 1),
+        settings=settings,
+        text_to_sql=gateway,
+    )
+
+
+def test_text_to_sql_tool_is_hidden_without_gateway() -> None:
+    executor = _tool_executor(
+        replace(_settings(), text_to_sql_enabled=True), None
+    )
+
+    names = {
+        item["function"]["name"] for item in executor.definitions
+    }
+
+    assert "text_to_sql" not in names
+
+
+def test_text_to_sql_tool_is_available_with_gateway() -> None:
+    executor = _tool_executor(
+        replace(_settings(), text_to_sql_enabled=True), FakeTextToSql()
+    )
+
+    names = {
+        item["function"]["name"] for item in executor.definitions
+    }
+
+    assert "text_to_sql" in names
+
+
+async def test_text_to_sql_tool_delegates_and_traces_payload() -> None:
+    gateway = FakeTextToSql()
+    trace = FakeTrace()
+    executor = StoreToolExecutor(
+        rewriter=QueryRewriter(
+            chat=ScriptedChat([]),
+            settings=_settings(),
+            trace=AgentTraceRecorder(trace, 1),
+        ),
+        retriever=FakeRetriever(),
+        catalog=FakeCatalog(),
+        orders=FakeOrders(),
+        complaints=FakeComplaints(),
+        trace=AgentTraceRecorder(trace, 1),
+        settings=replace(_settings(), text_to_sql_enabled=True),
+        text_to_sql=gateway,
+    )
+    from app.modules.agent.domain.scope import CustomerScope
+
+    result = await executor.execute(
+        name="text_to_sql",
+        arguments={"question": "Quanto eu gastei?"},
+        scope=CustomerScope(
+            customer_id=7,
+            customer_name="Lucas",
+            conversation_id=10,
+            message_id=1,
+        ),
+        history=[],
+        intent=Intent(primary_intent=IntentKind.ANALYTICS),
+    )
+
+    assert result.ok is True
+    assert gateway.calls
+    tool_step = next(
+        step for step in trace.steps if step.tool_name == "text_to_sql"
+    )
+    assert tool_step.output["sql"] == "SELECT 1"
+
+
 def test_prompts_encode_react_and_general_out_of_scope() -> None:
     assert "Thought:" in ORCHESTRATOR_SYSTEM_PROMPT
     assert "Action" in ORCHESTRATOR_SYSTEM_PROMPT

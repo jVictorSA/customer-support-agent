@@ -14,6 +14,7 @@ from app.modules.agent.application.interfaces import (
     ComplaintGateway,
     KnowledgeRetriever,
     OrderGateway,
+    TextToSqlGateway,
     TokenCounter,
 )
 from app.modules.agent.application.orchestrator import ReActOrchestrator
@@ -48,6 +49,7 @@ class ProcessMessageUseCase:
         complaints: ComplaintGateway,
         traces: TraceRepository,
         settings: AgentRuntimeSettings,
+        text_to_sql: TextToSqlGateway | None = None,
     ) -> None:
         self._context_port = context_port
         self._chat = chat
@@ -58,6 +60,7 @@ class ProcessMessageUseCase:
         self._complaints = complaints
         self._traces = traces
         self._settings = settings
+        self._text_to_sql = text_to_sql
         self._grounding = GroundingValidator()
 
     async def execute(self, message_id: int) -> None:
@@ -102,6 +105,7 @@ class ProcessMessageUseCase:
                 complaints=self._complaints,
                 trace=trace,
                 settings=self._settings,
+                text_to_sql=self._text_to_sql,
             )
             orchestrator = ReActOrchestrator(
                 chat=self._chat,

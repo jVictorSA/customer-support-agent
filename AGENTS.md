@@ -93,9 +93,10 @@ separately.
   HTTP responses. Internal detail only when `APP_ENV=development`.
 - Do not invent open decisions: authentication on legacy `/customers` and
   `/orders`, write endpoints for the operational business modules, lint/CI
-  tooling, text-to-SQL, reranking, semantic memory and complaint resolution are
-  still open. The `/documents` ingestion write surface is intentionally
-  implemented but still unauthenticated.
+  tooling, reranking, semantic memory and complaint resolution are still open.
+  Text-to-SQL is implemented as an opt-in agent tool with a read-only role and
+  RLS. The `/documents` ingestion write surface is intentionally implemented but
+  still unauthenticated.
 - Conversation persistence conventions: public UUIDs in URLs, integer `Identity`
   PKs, one in-flight user turn per conversation, `client_message_id`
   idempotency, and best-effort agent traces in `agent_runs`/`agent_steps`.

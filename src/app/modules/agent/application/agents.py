@@ -69,6 +69,18 @@ class IntentAgent:
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": INTENT_SYSTEM_PROMPT}
         ]
+        if not self._settings.text_to_sql_enabled:
+            messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        "A ferramenta text_to_sql está desabilitada neste "
+                        "ambiente. Não use a intenção analytics; classifique "
+                        "perguntas de catálogo como product_search e perguntas "
+                        "de pedidos como order_status."
+                    ),
+                }
+            )
         for item in _fit_history(
             history,
             max_messages=self._settings.history_max_messages,
