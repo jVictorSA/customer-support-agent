@@ -30,13 +30,17 @@ Business modules `categories`, `products`, `customers`, `orders` and
 `promotions` are implemented with GET-only routes, paginated responses and full
 CRUD repositories. Document ingestion is implemented in `modules/documents`
 with MinIO, Celery/RabbitMQ, Docling, DeepSeek summaries and Jina embeddings.
-Retrieval and the conversational agent are not implemented yet.
+The conversational flow is implemented in `modules/auth`, `modules/conversations`,
+`modules/messages`, `modules/complaints` and `modules/agent`, with JWT auth,
+ReAct orchestration, hybrid retrieval, deterministic data tools, durable agent
+traces and HMAC-signed webhooks.
 
 ## Architecture in one line
 
 `presentation -> application -> domain`; `infrastructure` implements
 `application` interfaces. Routers never touch the database; repositories own all
-transactions and commit; use cases depend on `Protocol` interfaces.
+transactions and commit; use cases depend on `Protocol` interfaces. The API
+enqueues chat turns; the lightweight `agent-worker` runs the ReAct pipeline.
 
 ## Commands
 
@@ -48,6 +52,7 @@ uv run pytest
 docker compose up --build -d
 docker compose logs -f api
 docker compose logs -f worker
+docker compose logs -f agent-worker
 # API: http://127.0.0.1:8000, docs: http://127.0.0.1:8000/docs
 # MinIO console: http://127.0.0.1:9001
 # RabbitMQ management: http://127.0.0.1:15672
@@ -86,10 +91,14 @@ separately.
   presentation.
 - Do not expose stack traces, SQL, credentials, prompts, or customer PII in
   HTTP responses. Internal detail only when `APP_ENV=development`.
-- Do not invent open decisions: authentication/authorization, write endpoints
-  for the operational business modules, lint/CI tooling, and retrieval/agent
-  behavior are still open. The `/documents` ingestion write surface is
-  intentionally implemented but still unauthenticated.
+- Do not invent open decisions: authentication on legacy `/customers` and
+  `/orders`, write endpoints for the operational business modules, lint/CI
+  tooling, text-to-SQL, reranking, semantic memory and complaint resolution are
+  still open. The `/documents` ingestion write surface is intentionally
+  implemented but still unauthenticated.
+- Conversation persistence conventions: public UUIDs in URLs, integer `Identity`
+  PKs, one in-flight user turn per conversation, `client_message_id`
+  idempotency, and best-effort agent traces in `agent_runs`/`agent_steps`.
 - Persistence conventions are fixed: integer `Identity` PKs, `TimestampMixin`,
   `Numeric(12,2)` + `Decimal` for money, native Postgres enums, and
   `order_items` inside the `orders` aggregate.

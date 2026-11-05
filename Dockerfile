@@ -121,3 +121,45 @@ USER app
 EXPOSE 8000
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# Conversational agent worker: no Docling, PyTorch or Tesseract -------------
+FROM base AS agent-builder
+
+COPY pyproject.toml uv.lock README.md ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project --no-dev --group agent
+
+COPY . .
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --group agent --no-editable
+
+FROM base AS agent-dev
+
+COPY pyproject.toml uv.lock README.md ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project --group agent
+
+COPY --chown=app:app . .
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --group agent
+
+USER app
+
+CMD ["celery", "-A", "app.agent_worker.celery_app", "worker", "--loglevel=INFO", "--concurrency=2", "--queues=conversations.process"]
+
+FROM python:3.12-slim AS agent-runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH"
+
+RUN groupadd --gid 1000 app \
+    && useradd --uid 1000 --gid app --create-home --shell /bin/bash app
+
+WORKDIR /app
+
+COPY --from=agent-builder --chown=app:app /app /app
+
+USER app
+
+CMD ["celery", "-A", "app.agent_worker.celery_app", "worker", "--loglevel=INFO", "--concurrency=2", "--queues=conversations.process"]

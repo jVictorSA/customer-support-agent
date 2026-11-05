@@ -58,3 +58,23 @@ services:
     volumes:
       - .:/app
       - /app/.venv
+
+  agent-worker:
+    build:
+      target: agent-dev
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: db
+      RABBITMQ_HOST: rabbitmq
+    command:
+      - celery
+      - -A
+      - app.agent_worker.celery_app
+      - worker
+      - --loglevel=INFO
+      - --concurrency=2
+      - --queues=conversations.process
+    volumes:
+      - .:/app
+      - /app/.venv

@@ -89,9 +89,11 @@ must state why it is expected and the evidence source.
 - **Bulk data enters through the CSV importer** — `import-csv` is the only
   supported bulk path, runs outside startup and uses one transaction. Evidence:
   `infrastructure/importing/csv_importer.py`, `cli/import_csv.py`.
-- **GET-only operational API; ingestion is the exception** — business modules
-  expose list/detail routes; only `/documents` has upload/update/delete routes
-  because ingestion is an operator workflow. Evidence: module routers.
+- **GET-only operational API; ingestion and chat are the exceptions** — the
+  categories/products/customers/orders/promotions modules expose list/detail
+  routes; `/documents` has upload/update/delete because ingestion is an operator
+  workflow, and `/conversations` has scoped message writes because chat is the
+  product surface. Evidence: module routers.
 - **Integer PK + public UUID for documents** — document/section/chunk tables
   keep the project's `Identity()` PK convention and expose a separate
   `public_id` UUID in the API. Evidence: document models and schemas.
@@ -103,11 +105,47 @@ must state why it is expected and the evidence source.
   embedding batches are cached under `cache/{sha256}/...` keyed by checksum and
   version so provider transient failures do not discard completed work.
   Evidence: `application/checkpoints.py`, MinIO storage adapter.
+- **JWT identity + repository-level ownership** — the access token carries
+  `customer_id`; conversation routes filter by the authenticated customer, and
+  order/complaint tools derive an immutable scope instead of accepting a
+  `customer_id` argument. Evidence: `modules/auth/`, `modules/messages/`,
+  `modules/agent/application/tools.py`.
+- **DTOs and dataclasses live in `domain`** — entities, value objects, result
+  DTOs, tool/chat payloads, trace steps, processing contexts and configuration
+  snapshots are `domain` dataclasses. `application` keeps use cases and
+  `Protocol` ports; `presentation` keeps Pydantic schemas. Evidence:
+  `modules/agent/domain/`, `modules/documents/domain/`,
+  `modules/auth/domain/results.py`.
+- **Explicit ReAct loop** — the orchestrator prompt requires
+  `Thought -> Action -> Observation -> Thought`, one tool call per iteration and
+  a final `Thought + Final Answer` handoff note. Evidence:
+  `modules/agent/application/prompts.py`, `orchestrator.py`.
+- **Out-of-scope classification includes safety** — the intent agent classifies
+  `accessory`, `benign_off_topic`, `harmful_or_illegal` and `other`; harmful
+  requests are refused deterministically before any tool or writer call.
+  Evidence: `modules/agent/domain/intent.py`,
+  `modules/agent/application/process_message.py`.
+- **Separate conversation modules with eventual side effects** — `conversations`,
+  `messages` and `complaints` own their tables; cross-module flags such as
+  `awaiting_human` are applied idempotently after the primary write. Evidence:
+  `modules/complaints/application/register_complaint.py`,
+  `modules/conversations/infrastructure/repository.py`.
+- **Best-effort agent tracing** — every LLM/tool/validation step is persisted in
+  `agent_runs`/`agent_steps`; trace write failures are logged and do not abort
+  the customer reply. Evidence: `modules/agent/application/trace_recorder.py`.
+- **Signed webhook delivered in a separate Celery task** — processing never
+  regenerates an answer to retry delivery; the assistant message carries
+  `delivery_status`, attempts and last error. Evidence:
+  `modules/agent/application/deliver_webhook.py`, `src/app/agent_worker.py`.
+- **One in-flight user turn per conversation** — `POST /messages` returns `409`
+  while a queued/processing user message exists; `client_message_id` provides
+  idempotency. Evidence: `modules/messages/infrastructure/repository.py`.
 
 ## Not yet conventions
 
 The following are open decisions and must not be treated as established rules:
-authentication/authorization, write endpoints, the full error catalog beyond
-404/409/400, and lint/format/type-check/CI tooling. Evidence: no auth
-dependency is declared in `pyproject.toml`, routers only declare GET routes, and
-no lint/CI configuration exists.
+authentication on the legacy `/customers` and `/orders` routes, write endpoints
+for the operational business modules, text-to-SQL/reranking/semantic memory,
+complaint resolution workflow, and lint/format/type-check/CI tooling. Evidence:
+legacy routers still have no auth dependency, `AGENT_TEXT_TO_SQL_ENABLED`
+defaults to false, and no lint/CI configuration exists.

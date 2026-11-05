@@ -46,6 +46,15 @@ class JinaEmbeddingProvider:
         return self._dimensions
 
     async def embed_passages(self, texts: list[str]) -> list[list[float]]:
+        return await self._embed(texts, task="retrieval.passage")
+
+    async def embed_query(self, text: str) -> list[float]:
+        vectors = await self._embed([text], task="retrieval.query")
+        return vectors[0]
+
+    async def _embed(
+        self, texts: list[str], *, task: str
+    ) -> list[list[float]]:
         if not texts:
             return []
         if not self._api_key:
@@ -66,7 +75,7 @@ class JinaEmbeddingProvider:
                         },
                         json={
                             "model": self._model,
-                            "task": "retrieval.passage",
+                            "task": task,
                             "dimensions": self._dimensions,
                             "input": texts,
                         },

@@ -10,7 +10,7 @@ from app.modules.documents.application.exceptions import (
 from app.modules.documents.application.ingest_document import (
     IngestDocumentUseCase,
 )
-from app.modules.documents.application.settings import (
+from app.modules.documents.domain.settings import (
     DocumentIngestionSettings,
 )
 from app.modules.documents.domain.content_block import (

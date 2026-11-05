@@ -8,7 +8,7 @@ Source of truth: `.agents/project-context/validation.md`.
 uv run pytest
 ```
 
-Run it after every code change. The verified baseline is `36 passed, 3 skipped`;
+Run it after every code change. The verified baseline is `86 passed, 8 skipped`;
 the skipped tests are the opt-in Postgres integration tests.
 
 ## Mandatory

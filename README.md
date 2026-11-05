@@ -4,9 +4,11 @@ API de agente de atendimento ao cliente para uma loja de instrumentos musicais.
 
 O projeto está em desenvolvimento. A API conecta em um Postgres 17 com
 `pgvector`/`ltree` via SQLAlchemy async, as migrations são gerenciadas pelo
-Alembic, o endpoint `/health/db` verifica a conexão e o módulo de documentos
-já implementa a ingestão de PDFs com armazenamento, processamento assíncrono e
-embeddings.
+Alembic, o endpoint `/health/db` verifica a conexão, o módulo de documentos
+implementa a ingestão de PDFs com armazenamento, processamento assíncrono e
+embeddings, e o fluxo de atendimento conversacional já implementa login JWT,
+conversas, mensagens, reclamações, processamento assíncrono via Celery e o
+agente ReAct com tools de RAG, catálogo, pedidos e reclamações.
 
 ## Stack
 
@@ -19,7 +21,8 @@ embeddings.
 - [MinIO](https://min.io/) para armazenamento dos PDFs e checkpoints
 - [RabbitMQ](https://www.rabbitmq.com/) + [Celery](https://docs.celeryq.dev/) para processamento assíncrono
 - [Docling](https://docling-project.github.io/docling/) para extração estrutural de PDF
-- [Jina AI](https://jina.ai/embeddings/) para embeddings e [DeepSeek](https://api-docs.deepseek.com/) para resumos de seção
+- [Jina AI](https://jina.ai/embeddings/) para embeddings e [DeepSeek](https://api-docs.deepseek.com/) para resumos de seção e agentes
+- [PyJWT](https://pyjwt.readthedocs.io/) para autenticação
 - [uv](https://docs.astral.sh/uv/) para gerenciamento do ambiente e dependências
 - [Docker Compose](https://docs.docker.com/compose/) para Postgres, MinIO, RabbitMQ, API e worker
 - [pytest](https://docs.pytest.org/) + [pytest-asyncio](https://pytest-asyncio.readthedocs.io/) para testes
@@ -72,7 +75,19 @@ As principais variáveis são:
 | `JINA_EMBEDDING_MODEL` | Modelo de embedding | `jina-embeddings-v5-text-small` |
 | `JINA_EMBEDDING_DIMENSIONS` | Dimensão do vetor (fixa no schema) | `1024` |
 | `DEEPSEEK_API_KEY` | Chave da API DeepSeek | vazio |
-| `DEEPSEEK_MODEL` | Modelo usado para resumos | `deepseek-flash` |
+| `DEEPSEEK_MODEL` | Modelo usado para resumos e agentes | `deepseek-flash` |
+| `AUTH_JWT_SECRET` | Segredo HS256 dos tokens | valor de desenvolvimento |
+| `AUTH_ACCESS_TOKEN_EXPIRE_MINUTES` | Validade do access token | `15` |
+| `AUTH_REFRESH_TOKEN_EXPIRE_DAYS` | Validade do refresh token | `7` |
+| `AGENT_MAX_ITERATIONS` | Limite do loop ReAct | `6` |
+| `AGENT_HISTORY_MAX_MESSAGES` | Mensagens de contexto | `20` |
+| `AGENT_HISTORY_MAX_TOKENS` | Orçamento de tokens do histórico | `6000` |
+| `AGENT_*_MODEL` | Override de modelo por agente (vazio usa `DEEPSEEK_MODEL`) | vazio |
+| `AGENT_TEXT_TO_SQL_ENABLED` | Habilita a tool de text-to-SQL (não implementada) | `false` |
+| `RETRIEVAL_*` | Top-k vetorial/lexical, RRF, contexto | `20/20/60/8/6000` |
+| `CONVERSATION_WEBHOOK_SECRET` | Segredo HMAC dos webhooks | valor de desenvolvimento |
+| `CONVERSATION_WEBHOOK_MAX_RETRIES` | Retries de entrega do webhook | `5` |
+| `CONVERSATION_WEBHOOK_ALLOW_PRIVATE_HOSTS` | Permite localhost/rede privada (dev) | `true` em dev |
 
 O `.env` usa `POSTGRES_HOST=localhost` para permitir rodar a API e comandos
 Alembic direto no host. No container, o Compose sobrescreve
@@ -86,6 +101,7 @@ Subir API, Postgres, MinIO, RabbitMQ e worker em desenvolvimento:
 docker compose up --build -d
 docker compose logs -f api
 docker compose logs -f worker
+docker compose logs -f agent-worker
 ```
 
 A API ficará disponível em `http://127.0.0.1:8000`, com documentação em
@@ -96,7 +112,9 @@ A API ficará disponível em `http://127.0.0.1:8000`, com documentação em
 O código é montado dentro do container com hot reload. O Postgres fica exposto
 em `localhost:5432` para inspeção com clientes SQL. O worker roda em uma imagem
 própria (`worker-dev`/`worker-runtime`) porque carrega Docling, modelos de layout
-e Tesseract, e pode escalar independentemente da API.
+e Tesseract, e pode escalar independentemente da API. O `agent-worker` usa uma
+imagem leve (`agent-dev`/`agent-runtime`), sem Docling, e consome apenas a fila
+`conversations.process`.
 
 Para parar:
 
@@ -124,7 +142,9 @@ async. A migration inicial cria as tabelas `categories`, `products`,
 `customers`, `orders`, `order_items` e `promotions`, com enums nativos do
 Postgres, índices, checks e colunas de auditoria. A migration de documentos cria
 `documents`, `document_sections` e `document_chunks`, habilita as extensões
-`vector` e `ltree` e adiciona índices HNSW, GiST e GIN.
+`vector` e `ltree` e adiciona índices HNSW, GiST e GIN. A migration de conversa
+cria `conversations`, `messages`, `complaints`, `agent_runs` e `agent_steps`,
+com enums, FKs, índice único parcial de idempotência e índices de consulta.
 
 Comandos canônicos, executados dentro do container da API:
 
@@ -215,6 +235,66 @@ O worker usa `--concurrency=1` por padrão. A Jina é chamada com rate limit loc
 (100 RPM / 100k TPM), retries com backoff e `Retry-After`; o Celery também
 reprocessa a task até 3 vezes com backoff.
 
+## Atendimento conversacional
+
+O fluxo é assíncrono e separado da ingestão de documentos:
+
+```text
+POST /auth/login (e-mail + telefone)
+  -> access token (15 min) + refresh token (7 dias)
+POST /conversations
+POST /conversations/{public_id}/messages  -> 202 Accepted
+  -> messages (queued) + task conversations.process no RabbitMQ
+agent-worker:
+  -> claim atômico da mensagem
+  -> intent agent (JSON estruturado)
+  -> orquestrador ReAct (máx. AGENT_MAX_ITERATIONS)
+       -> search_store_knowledge (RAG híbrido + rewriter)
+       -> search_catalog / get_product_details
+       -> list_my_orders / get_order_status (escopo do cliente)
+       -> register_complaint
+  -> response writer + validação de grounding
+  -> messages (assistant) + agent_runs/agent_steps
+  -> conversations.deliver_webhook (HMAC-SHA256, retries)
+```
+
+Características principais:
+
+- **isolamento por cliente**: o token identifica o `customer_id`; as tools de
+  pedido não aceitam `customer_id` e sempre filtram pelo cliente autenticado;
+- **uma mensagem em processamento por conversa**: um novo POST retorna `409`;
+- **idempotência**: `client_message_id` único por conversa;
+- **polling**: `GET /conversations/{public_id}/messages?after_message_id=...`;
+- **reclamações**: no máximo uma reclamação aberta por conversa; a conversa
+  continua ativa e recebe `awaiting_human=true`;
+- **agente ReAct explícito**: o orquestrador opera em
+  `Thought -> Action -> Observation -> Thought`, com no máximo uma tool por
+  iteração e uma `Final Answer` de handoff para o response writer;
+- **out-of-scope amplo**: acessórios, piadas, receitas, assuntos gerais e
+  pedidos perigosos/ilegais são classificados como fora do escopo. Pedidos
+  perigosos são recusados deterministicamente antes de qualquer tool ou writer;
+- **grounding**: preços/estoque/status precisam vir de tool; citações inválidas
+  disparam reparo e, em último caso, fallback seguro;
+- **traces**: todas as chamadas de LLM, tools e validações são persistidas em
+  `agent_runs`/`agent_steps`, incluindo prompts, resultados, tokens e latência;
+- **sem autenticação nas rotas antigas**: `/customers` e `/orders` continuam
+  abertas nesta fase; apenas o fluxo conversacional e `/complaints` usam JWT.
+
+### Teste rápido no Swagger
+
+1. Faça login em `POST /auth/login` com um cliente carregado por `import-csv`.
+2. Clique em **Authorize** e informe o `access_token`.
+3. Crie uma conversa em `POST /conversations`.
+4. Envie uma mensagem em `POST /conversations/{public_id}/messages` com
+   `webhook_url=http://api:8000/dev/webhooks/conversation` (Docker) ou
+   `http://127.0.0.1:8000/dev/webhooks/conversation` (API no host).
+5. Acompanhe a resposta em `GET /conversations/{public_id}/messages` e o status
+   de entrega no campo `delivery_status`.
+
+O receiver de desenvolvimento existe apenas com `APP_ENV=development`, valida a
+assinatura HMAC e não persiste o payload. Para usar `http://127.0.0.1:8000` no
+host, mantenha `CONVERSATION_WEBHOOK_ALLOW_PRIVATE_HOSTS=true` no `.env`.
+
 ## Testes
 
 Testes unitários e de contrato:
@@ -244,6 +324,17 @@ testes; não é preciso migrar manualmente.
 | `GET` | `/` | Nome, versão e status da API |
 | `GET` | `/health` | Liveness da API |
 | `GET` | `/health/db` | Readiness do banco (`SELECT 1`) |
+| `POST` | `/auth/login` | Login com `email` + `phone`; retorna access/refresh tokens |
+| `POST` | `/auth/refresh` | Troca refresh token por novo access token |
+| `GET` | `/auth/me` | Perfil do cliente autenticado |
+| `POST` | `/conversations` | Cria conversa para o cliente autenticado |
+| `GET` | `/conversations` | Lista paginada das conversas do cliente |
+| `GET` | `/conversations/{public_id}` | Detalhe da conversa |
+| `POST` | `/conversations/{public_id}/messages` | Enfileira mensagem (`202`) |
+| `GET` | `/conversations/{public_id}/messages` | Mensagens paginadas; `after_message_id` |
+| `GET` | `/complaints` | Lista paginada das reclamações do cliente |
+| `GET` | `/complaints/{public_id}` | Detalhe da reclamação |
+| `POST` | `/dev/webhooks/conversation` | Receiver dev de webhook (somente development) |
 | `GET` | `/categories` | Lista paginada de categorias |
 | `GET` | `/categories/{category_id}` | Detalhe da categoria |
 | `GET` | `/products` | Lista paginada; filtros `category_id`, `status`, `name`, `max_price` |
@@ -354,6 +445,8 @@ Postgres gerenciado, caso necessário.
 ├── src/
 │   └── app/
 │       ├── main.py           # aplicação FastAPI e lifespan
+│       ├── worker.py         # worker de ingestão de documentos
+│       ├── agent_worker.py   # worker do agente conversacional
 │       ├── core/
 │       │   ├── config.py     # Settings da aplicação
 │       │   └── exceptions.py # AppError e bases de erro
@@ -368,6 +461,11 @@ Postgres gerenciado, caso necessário.
 │       ├── cli/import_csv.py          # comando import-csv
 │       └── modules/
 │           ├── health/
+│           ├── auth/
+│           ├── conversations/
+│           ├── messages/
+│           ├── complaints/
+│           ├── agent/
 │           ├── categories/
 │           ├── products/
 │           ├── customers/
@@ -414,8 +512,8 @@ O fluxo usado é: carregar o contexto e as regras antes de implementar; usar as
 skills para scaffolding e migrations; rodar `uv run pytest`; revisar o staged
 com `pre-commit-review`; e registrar decisões de arquitetura em
 `.agents/project-context/architecture.md`.
-Nenhuma ferramenta de IA roda em produção — o agente de atendimento ao cliente é
-o produto, não o assistente de codificação.
+Nenhum assistente de codificação roda em produção — o agente de atendimento ao
+cliente é o produto, não o assistente de codificação.
 
 ## Decisões de arquitetura
 
@@ -448,3 +546,34 @@ o produto, não o assistente de codificação.
   a API sobe, loga o problema e `/health/db` retorna 503.
 - **UTC** no banco e na aplicação. A conversão para `America/Sao_Paulo` deve
   acontecer apenas na apresentação.
+- **JWT stateless** com access token de 15 minutos e refresh token de 7 dias; o
+  token carrega `customer_id`, e toda consulta de conversa/pedido é filtrada
+  pelo cliente autenticado.
+- **Agente ReAct próprio** sobre function calling do DeepSeek, sem framework de
+  orquestração. Intent, rewriter e response writer são etapas separadas;
+  todas as chamadas e tools são rastreadas.
+- **Retrieval híbrido** com pgvector + FTS português, fusão RRF e expansão
+  parent-child, sem reranker nesta fase.
+- **Tools determinísticas para dados operacionais**; text-to-SQL tem contrato
+  reservado, mas permanece desabilitado (`AGENT_TEXT_TO_SQL_ENABLED=false`).
+- **Webhook assinado com HMAC-SHA256**: entrega em task separada, com retries e
+  status persistido na mensagem; o receiver `/dev/webhooks/conversation` existe
+  apenas em development.
+- **Traces completos** em `agent_runs`/`agent_steps` (prompts, tools, tokens,
+  latência e erros) para evolução futura do agente.
+
+## Limitações conhecidas
+
+- `/customers` e `/orders` ainda não exigem JWT; a proteção desta iteração cobre
+  apenas `/auth`, `/conversations`, `/messages` e `/complaints`.
+- Login usa e-mail + telefone como prova de identidade, sem senha; não há rate
+  limiting nem revogação de refresh token.
+- Não há outbox transacional: se o enfileiramento falhar após criar a mensagem,
+  ela é marcada como `failed` e a API responde `503`.
+- Text-to-SQL não está implementado; o agente responde catálogo, preço, estoque,
+  pedidos e políticas com tools determinísticas e RAG.
+- Sem reranker, sumarização de histórico ou memória semântica de mensagens.
+- Os traces guardam prompts e conteúdo de conversa (dados sensíveis) em tabelas
+  internas; a política completa de LGPD/retenção fica para uma próxima fase.
+- A validação de URL do webhook bloqueia hosts privados em hml/prod, mas não
+  cobre DNS rebinding.
