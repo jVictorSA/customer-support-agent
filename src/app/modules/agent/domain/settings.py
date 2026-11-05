@@ -25,3 +25,6 @@ class AgentRuntimeSettings:
     rewriter_max_tokens: int = 400
     writer_max_tokens: int = 1200
     tool_result_max_chars: int = 6000
+    store_timezone: str = "America/Sao_Paulo"
+    store_holidays: tuple[str, ...] = ()
+    store_metro_cep_prefixes: tuple[str, ...] = ("790", "791")

@@ -118,6 +118,9 @@ def test_orders_api_list_and_detail(client: TestClient) -> None:
             "product_id": 93,
             "quantity": 1,
             "product_name": "Martin D-28",
+            "is_final_sale": False,
+            "is_customized": False,
+            "is_hygiene_restricted": False,
         }
     ]
 

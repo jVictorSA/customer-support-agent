@@ -474,6 +474,21 @@ def _tool_executor(settings: AgentRuntimeSettings, gateway) -> StoreToolExecutor
     )
 
 
+def test_store_policy_tools_are_exposed() -> None:
+    executor = _tool_executor(_settings(), None)
+
+    names = {
+        item["function"]["name"] for item in executor.definitions
+    }
+
+    assert {
+        "get_store_status",
+        "check_return_eligibility",
+        "calculate_payment_options",
+        "estimate_shipping",
+    } <= names
+
+
 def test_text_to_sql_tool_is_hidden_without_gateway() -> None:
     executor = _tool_executor(
         replace(_settings(), text_to_sql_enabled=True), None

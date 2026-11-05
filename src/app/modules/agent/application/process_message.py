@@ -11,6 +11,7 @@ from app.modules.agent.application.interfaces import (
     AgentContextPort,
     CatalogGateway,
     ChatModel,
+    Clock,
     ComplaintGateway,
     KnowledgeRetriever,
     OrderGateway,
@@ -50,6 +51,7 @@ class ProcessMessageUseCase:
         traces: TraceRepository,
         settings: AgentRuntimeSettings,
         text_to_sql: TextToSqlGateway | None = None,
+        clock: Clock | None = None,
     ) -> None:
         self._context_port = context_port
         self._chat = chat
@@ -61,6 +63,7 @@ class ProcessMessageUseCase:
         self._traces = traces
         self._settings = settings
         self._text_to_sql = text_to_sql
+        self._clock = clock
         self._grounding = GroundingValidator()
 
     async def execute(self, message_id: int) -> None:
@@ -106,6 +109,7 @@ class ProcessMessageUseCase:
                 trace=trace,
                 settings=self._settings,
                 text_to_sql=self._text_to_sql,
+                clock=self._clock,
             )
             orchestrator = ReActOrchestrator(
                 chat=self._chat,

@@ -1,9 +1,11 @@
+from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.modules.agent.application.interfaces import Clock
 from app.modules.agent.domain.results import (
     CatalogItem,
     CatalogPromotion,
@@ -14,8 +16,9 @@ from app.modules.products.infrastructure.models import ProductModel
 
 
 class SqlAlchemyCatalogGateway:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, clock: Clock) -> None:
         self._session = session
+        self._clock = clock
 
     async def search_catalog(
         self,
@@ -67,8 +70,9 @@ class SqlAlchemyCatalogGateway:
                     .limit(limit)
                 )
             ).all()
+            now = self._clock.now()
             return [
-                _to_item(product, category.name)
+                _to_item(product, category.name, now)
                 for product, category in rows
             ]
 
@@ -105,14 +109,16 @@ class SqlAlchemyCatalogGateway:
             if row is None:
                 return None
             product, category = row
-            return _to_item(product, category.name)
+            return _to_item(product, category.name, self._clock.now())
 
 
-def _to_item(product: ProductModel, category_name: str) -> CatalogItem:
+def _to_item(
+    product: ProductModel, category_name: str, now: datetime
+) -> CatalogItem:
     active = [
         promotion
         for promotion in product.promotions
-        if promotion.is_active
+        if _promotion_is_active(promotion, now)
     ]
     discount = max(
         (promotion.discount_percent for promotion in active), default=0
@@ -136,8 +142,30 @@ def _to_item(product: ProductModel, category_name: str) -> CatalogItem:
                 promotion_id=promotion.promotion_id,
                 discount_percent=promotion.discount_percent,
                 description=promotion.description,
+                starts_at=(
+                    promotion.starts_at.isoformat()
+                    if promotion.starts_at
+                    else None
+                ),
+                ends_at=(
+                    promotion.ends_at.isoformat()
+                    if promotion.ends_at
+                    else None
+                ),
             )
             for promotion in active
         ),
         specs=product.specs,
     )
+
+
+def _promotion_is_active(promotion, now: datetime) -> bool:
+    if not promotion.is_active:
+        return False
+    starts_at = promotion.starts_at
+    ends_at = promotion.ends_at
+    if starts_at is not None and starts_at > now:
+        return False
+    if ends_at is not None and ends_at < now:
+        return False
+    return True

@@ -45,8 +45,9 @@
     webhook settings.
   - `tests/agent/` and `tests/integration/test_conversation_flow.py` —
     orchestration fakes and opt-in database tests.
-- Business/product requirements: prices, stock, order status, deadlines and
-  promotion validity come from deterministic tools, never from the model.
+- Business/product requirements: prices, stock, order status, deadlines,
+  promotion validity, opening hours, payment options, shipping estimates and
+  return eligibility come from deterministic tools, never from the model.
   Out-of-scope accessory requests are redirected.
 
 ## Contracts
@@ -55,7 +56,9 @@
   import Docling, Jina, DeepSeek, MinIO, Celery or PyJWT SDKs.
 - Chat tool schemas and prompts are a contract: `search_store_knowledge`,
   `search_catalog`, `get_product_details`, `list_my_orders`,
-  `get_order_status`, `register_complaint` and the opt-in `text_to_sql`.
+  `get_order_status`, `get_store_status`, `check_return_eligibility`,
+  `calculate_payment_options`, `estimate_shipping`, `register_complaint` and
+  the opt-in `text_to_sql`.
   Changing a tool name/field requires updating prompts, tests and traces.
 - `text_to_sql` only receives a `question`; the customer scope is server-derived.
   It returns `answered`, `clarification_required`, `unsupported` or

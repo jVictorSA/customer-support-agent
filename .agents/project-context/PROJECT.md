@@ -46,12 +46,15 @@
   - `src/app/modules/{auth,conversations,messages,complaints,agent}/` —
     JWT authentication, conversation persistence, complaints, hybrid retrieval,
     ReAct orchestration, deterministic tools and durable agent traces;
-    `src/app/agent_worker.py` is the chat worker composition root.
+    `agent/domain/store_policy.py` owns opening hours, payment, shipping and
+    return rules; `src/app/agent_worker.py` is the chat worker composition root.
   - `src/app/modules/text_to_sql/` — opt-in Text-to-SQL with static semantic
     catalog, deterministic metrics, SQLGlot validation, read-only role and RLS.
   - `src/app/infrastructure/importing/` and `cli/` — CSV
     importer and `import-csv` command.
   - `tests/` — unit/contract tests plus opt-in integration tests.
+  - `samples/data/` — versioned demo CSVs; `samples/policies/` documents the
+    PDF upload for local demos.
   - `alembic/versions/` — migration scripts (initial migration included).
 - Domain data: the business scope, store rules and data model are summarized in
   `.agents/project-context/domain.md`. The six tables and the

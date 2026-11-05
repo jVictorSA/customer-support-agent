@@ -18,7 +18,7 @@
 uv run pytest
 ```
 
-Verified on 2026-11-04 after Text-to-SQL: `133 passed, 15 skipped`
+Verified on 2026-11-05 after the store-policy changes: `144 passed, 15 skipped`
 (the skipped tests are the opt-in Postgres integration/provider tests). This is
 the only automated quality gate currently configured.
 
@@ -55,6 +55,10 @@ the only automated quality gate currently configured.
   trace tables, retrieval SQL or migrations. For prompt/tool schema changes,
   update `tests/agent/test_process_message.py` and the tool contracts together.
   Real provider smoke tests must be marked `provider`.
+- Store-policy change: run `uv run pytest`; `tests/agent/test_store_policy.py`
+  covers opening hours, payment minimums, shipping zones and return deadlines.
+  Run the integration command when changing `promotions`, `orders`,
+  `order_items` or the migration.
 - Text-to-SQL change: run `uv run pytest`; unit tests use a scripted SQL chat
   model and fake executor. Run the integration command for RLS, read-only role,
   metric templates or catalog drift (`tests/integration/test_text_to_sql.py`).

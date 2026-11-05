@@ -23,6 +23,7 @@ from app.modules.agent.application.process_message import (
 )
 from app.modules.agent.application.prompts import FALLBACK_MESSAGE
 from app.modules.agent.domain.settings import AgentRuntimeSettings
+from app.modules.agent.infrastructure.clock import SystemClock
 from app.modules.agent.infrastructure.context import (
     MessageAgentContextAdapter,
     MessageDeliveryAdapter,
@@ -229,6 +230,17 @@ def _agent_settings() -> AgentRuntimeSettings:
         rewriter_max_tokens=settings.agent_rewriter_max_tokens,
         writer_max_tokens=settings.agent_writer_max_tokens,
         tool_result_max_chars=settings.agent_tool_result_max_chars,
+        store_timezone=settings.store_timezone,
+        store_holidays=tuple(
+            value.strip()
+            for value in settings.store_holidays.split(",")
+            if value.strip()
+        ),
+        store_metro_cep_prefixes=tuple(
+            value.strip()
+            for value in settings.store_metro_cep_prefixes.split(",")
+            if value.strip()
+        ),
     )
 
 
@@ -353,17 +365,19 @@ async def _process(message_id: int) -> None:
                 ),
                 orders=orders,
             )
+            clock = SystemClock()
             use_case = ProcessMessageUseCase(
                 context_port=context,
                 chat=_chat(),
                 counter=AgentTokenCounter(),
                 retriever=DocumentsKnowledgeRetriever(search),
-                catalog=SqlAlchemyCatalogGateway(session),
+                catalog=SqlAlchemyCatalogGateway(session, clock),
                 orders=orders,
                 complaints=complaints,
                 traces=SqlAlchemyTraceRepository(session),
                 settings=_agent_settings(),
                 text_to_sql=text_to_sql,
+                clock=clock,
             )
             await use_case.execute(message_id)
     finally:

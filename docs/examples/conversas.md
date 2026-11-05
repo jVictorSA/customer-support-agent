@@ -1,8 +1,8 @@
 # Exemplos de interação
 
 Conversas de exemplo com o agente da Empório da Música. Os dados operacionais
-usados são os CSVs de demonstração (`import-csv data/ --truncate`) e o cliente
-autenticado é o cliente `1` (Lucas Mendes).
+usados são os CSVs de demonstração (`import-csv samples/data/ --truncate`) e o
+cliente autenticado é o cliente `1` (Lucas Mendes).
 
 ## 1. Catálogo por faixa de preço
 
@@ -95,3 +95,24 @@ assuntos da loja.
 
 *`out_of_scope_type=harmful_or_illegal`; a recusa é determinística e acontece
 antes do orquestrador, das tools e do writer.*
+
+## Perguntas de exemplo adicionais
+
+Estas perguntas complementam as conversas acima e cobrem os cenários que o
+agente deve reconhecer. Algumas respostas dependem de melhorias planejadas
+(horário dinâmico, validade de promoção, elegibilidade de devolução e cálculo
+de pagamento/frete); a coluna “consulta esperada” indica o caminho desejado.
+
+| Pergunta | Cenário | Consulta esperada |
+| --- | --- | --- |
+| Qual o endereço da loja? | Informações gerais | `search_store_knowledge` |
+| Qual o horário de funcionamento? Vocês estão abertos agora? | Horário e expediente | `search_store_knowledge` + status de expediente |
+| Quanto custa o Takamine GD20? | Preço | `get_product_details` |
+| A promoção do Yamaha C40 ainda está válida? | Promoção e validade | `search_store_knowledge`/catálogo com validade |
+| Me arrependi da minha compra, posso devolver meu pedido? | Devolução | `search_store_knowledge` + elegibilidade de devolução |
+| Quanto fica o Yamaha C40 em 12x? Tem desconto no PIX? | Pagamento e parcelamento | `search_store_knowledge` + cálculo de pagamento |
+| Qual o frete para o CEP 79000-000? | Frete e prazo | `search_store_knowledge` + cálculo de frete |
+| Qual o status e o rastreamento do meu pedido? | Pedido | `list_my_orders`/`get_order_status` |
+| Meu pedido atrasou e quero registrar uma reclamação. | Reclamação | `register_complaint` |
+| Vocês vendem cordas de violão e palhetas? | Fora do escopo: acessório | redirecionamento sem catálogo |
+| Me passa uma receita de bolo? | Fora do escopo: assunto geral | redirecionamento |

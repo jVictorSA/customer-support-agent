@@ -10,6 +10,27 @@ embeddings, e o fluxo de atendimento conversacional já implementa login JWT,
 conversas, mensagens, reclamações, processamento assíncrono via Celery e o
 agente ReAct com tools de RAG, catálogo, pedidos e reclamações.
 
+## Sumário
+
+- [Stack](#stack)
+- [Requisitos](#requisitos)
+- [Configuração do ambiente](#configuração-do-ambiente)
+- [Como executar](#como-executar)
+- [Text-to-SQL](#text-to-sql)
+- [Migrations](#migrations)
+- [Importação de dados](#importação-de-dados)
+- [Ingestão de documentos](#ingestão-de-documentos)
+- [Atendimento conversacional](#atendimento-conversacional)
+- [Perguntas de exemplo](#perguntas-de-exemplo)
+- [Testes](#testes)
+- [Endpoints](#endpoints)
+- [Ambientes de hml/prod](#ambientes-de-hmlprod)
+- [Estrutura do projeto](#estrutura-do-projeto)
+- [Codificação com agentes de IA](#codificação-com-agentes-de-ia)
+- [Decisões de arquitetura](#decisões-de-arquitetura)
+- [O que eu faria com mais tempo](#o-que-eu-faria-com-mais-tempo)
+- [Limitações conhecidas](#limitações-conhecidas)
+
 ## Stack
 
 - [Python 3.12+](https://www.python.org/)
@@ -84,6 +105,9 @@ As principais variáveis são:
 | `AGENT_HISTORY_MAX_TOKENS` | Orçamento de tokens do histórico | `6000` |
 | `AGENT_*_MODEL` | Override de modelo por agente (vazio usa `DEEPSEEK_MODEL`) | vazio |
 | `AGENT_TEXT_TO_SQL_ENABLED` | Habilita a tool de text-to-SQL | `false` |
+| `STORE_TIMEZONE` | Fuso usado no status de expediente e regras de data | `America/Sao_Paulo` |
+| `STORE_HOLIDAYS` | Feriados em ISO-8601 separados por vírgula | vazio |
+| `STORE_METRO_CEP_PREFIXES` | Prefixos de CEP da região metropolitana | `790,791` |
 | `TEXT_TO_SQL_DB_USER` | Role read-only usado pelo executor SQL | `text_to_sql_reader` |
 | `TEXT_TO_SQL_DB_PASSWORD` | Senha do role read-only | valor de desenvolvimento |
 | `TEXT_TO_SQL_DATABASE_URL` | URL completa opcional do banco read-only | vazio |
@@ -225,21 +249,25 @@ sem rodar no startup. O comando aceita um diretório com seis arquivos:
 `categories.csv`, `products.csv`, `customers.csv`, `orders.csv`,
 `order_items.csv` e `promotions.csv`.
 
+Há um conjunto fictício versionado em `samples/data/`:
+
 ```bash
 # aplicar a migration antes da primeira carga
 docker compose exec api alembic upgrade head
 
-# importar/atualizar (idempotente, upsert por PK)
-uv run import-csv data/
+# importar/atualizar os dados de demonstração
+uv run import-csv samples/data/
 
 # recarregar do zero
-uv run import-csv data/ --truncate
+uv run import-csv samples/data/ --truncate
 ```
 
+O PDF de políticas usado nos exemplos não é versionado; veja
+[`samples/policies/README.md`](samples/policies/README.md) para o upload.
+
 Os cabeçalhos devem corresponder às colunas do modelo. `specs` é um objeto JSON,
-datas usam ISO-8601 e booleanos aceitam `true/false` ou `0/1`. Os CSVs não são
-versionados; `data/` está no `.gitignore`. A importação inteira roda em uma
-transação e ajusta as sequences após inserir IDs explícitos.
+datas usam ISO-8601 e booleanos aceitam `true/false` ou `0/1`. A importação
+inteira roda em uma transação e ajusta as sequences após inserir IDs explícitos.
 
 ## Ingestão de documentos
 
@@ -301,6 +329,8 @@ agent-worker:
        -> search_store_knowledge (RAG híbrido + rewriter)
        -> search_catalog / get_product_details
        -> list_my_orders / get_order_status (escopo do cliente)
+       -> get_store_status / check_return_eligibility
+       -> calculate_payment_options / estimate_shipping
        -> text_to_sql (métricas e consultas complexas, se habilitado)
        -> register_complaint
   -> response writer + validação de grounding
@@ -325,6 +355,10 @@ Características principais:
   perigosos são recusados deterministicamente antes de qualquer tool ou writer;
 - **grounding**: preços/estoque/status precisam vir de tool; citações inválidas
   disparam reparo e, em último caso, fallback seguro;
+- **regras de loja determinísticas**: horário/expediente, elegibilidade de
+  devolução/troca, cálculo de pagamento e estimativa de frete vêm das tools
+  `get_store_status`, `check_return_eligibility`, `calculate_payment_options` e
+  `estimate_shipping`, nunca de cálculo livre do modelo;
 - **Text-to-SQL**: consultas agregadas e buscas complexas usam um pipeline
   separado, com catálogo semântico, validação SQLGlot, role read-only e RLS por
   cliente; o SQL bruto não é enviado ao redator nem ao cliente;
@@ -347,6 +381,34 @@ Características principais:
 O receiver de desenvolvimento existe apenas com `APP_ENV=development`, valida a
 assinatura HMAC e não persiste o payload. Para usar `http://127.0.0.1:8000` no
 host, mantenha `CONVERSATION_WEBHOOK_ALLOW_PRIVATE_HOSTS=true` no `.env`.
+
+## Perguntas de exemplo
+
+As conversas completas estão em
+[`docs/examples/conversas.md`](docs/examples/conversas.md). As perguntas abaixo
+cobrem os principais cenários de atendimento e ajudam a validar a escolha de
+tools e políticas:
+
+| Cenário | Pergunta de exemplo | Consulta esperada |
+| --- | --- | --- |
+| Catálogo | Quais opções de violões disponíveis custando até R$ 1000? | `search_catalog` |
+| Preço e estoque | Quanto custa o Takamine GD20 e tem em estoque? | `search_catalog`/`get_product_details` |
+| Informações da loja | Qual o endereço da loja? | `search_store_knowledge` |
+| Horário | Qual o horário de funcionamento? Vocês estão abertos agora? | `search_store_knowledge` + status de expediente |
+| Pedido | Qual o status e o rastreamento do meu pedido? | `list_my_orders`/`get_order_status` |
+| Devolução | Me arrependi da minha compra, posso devolver meu pedido? | `search_store_knowledge` + elegibilidade de devolução |
+| Pagamento | Quanto fica o Yamaha C40 em 12x? Tem desconto no PIX? | `search_store_knowledge` + cálculo de pagamento |
+| Frete | Qual o frete para o CEP 79000-000? | `search_store_knowledge` + cálculo de frete |
+| Promoção | A promoção do Yamaha C40 ainda está válida? | `search_store_knowledge`/catálogo com validade |
+| Reclamação | Meu pedido atrasou e quero registrar uma reclamação. | `register_complaint` |
+| Fora do escopo | Vocês vendem cordas de violão e palhetas? | redirecionamento de acessório |
+| Fora do escopo | Me passa uma receita de bolo? | redirecionamento de assunto geral |
+
+As perguntas de horário, validade de promoção, elegibilidade de devolução e
+cálculo de pagamento/frete também estão listadas em
+[`docs/examples/conversas.md`](docs/examples/conversas.md). As validações
+determinísticas desses cenários fazem parte das melhorias planejadas; os
+exemplos documentam o comportamento esperado do agente.
 
 ## Testes
 
@@ -619,13 +681,40 @@ cliente é o produto, não o assistente de codificação.
   todas as chamadas e tools são rastreadas.
 - **Retrieval híbrido** com pgvector + FTS português, fusão RRF e expansão
   parent-child, sem reranker nesta fase.
-- **Tools determinísticas para dados operacionais**; text-to-SQL tem contrato
-  reservado, mas permanece desabilitado (`AGENT_TEXT_TO_SQL_ENABLED=false`).
+- **Tools determinísticas para dados operacionais**; text-to-SQL é opt-in
+  (`AGENT_TEXT_TO_SQL_ENABLED`), usa role read-only e RLS, e fica desabilitado
+  por padrão. Regras de horário, devolução, pagamento e frete também são tools
+  determinísticas.
 - **Webhook assinado com HMAC-SHA256**: entrega em task separada, com retries e
   status persistido na mensagem; o receiver `/dev/webhooks/conversation` existe
   apenas em development.
 - **Traces completos** em `agent_runs`/`agent_steps` (prompts, tools, tokens,
   latência e erros) para evolução futura do agente.
+
+## O que eu faria com mais tempo
+
+- **Prompts no banco de dados com cache em Redis**: permitir ajustes de prompt
+  sem deploy, versionamento e rollback, mantendo os prompts quentes em runtime.
+- **Contenção de reclamações e transbordo humano**: criar fila/atribuição para o
+  time responsável, SLA de retorno, resolução e transbordo controlado para evitar
+  sobrecarga do atendimento.
+- **CRUD completo dos módulos operacionais**: complementar as rotas GET atuais
+  com escrita para categorias, produtos, clientes, pedidos e promoções.
+- **RBAC e papéis na API**: separar permissões de cliente, atendente,
+  operador e administrador nas rotas autenticadas.
+- **Processamento autoevolutivo dos agentes**: usar os traces já persistidos
+  para avaliar, comparar e evoluir prompts, tools e políticas de roteamento.
+- **Canais omnichannel**: adicionar entrada/saída para WhatsApp, web, Messenger
+  e Instagram com uma camada comum de conversas e entrega.
+- **Melhorar a documentação Swagger**: documentar todos os endpoints com
+  summaries, descrições, exemplos de request/response e respostas de erro,
+  além de manter o fluxo de autenticação e os contratos assíncronos visíveis no
+  `/docs`.
+- **Testes de LLM/agentes com DeepEval**: medir qualidade de resposta,
+  fidelidade às políticas, uso correto de tools e regressões de prompt.
+- **Reduzir a imagem do ingestion worker**: hoje ela chega a ~11 GB no target de
+  desenvolvimento. O diagnóstico e o plano de redução estão em
+  [`docs/worker_image_size.md`](docs/worker_image_size.md).
 
 ## Limitações conhecidas
 
@@ -642,7 +731,17 @@ cliente é o produto, não o assistente de codificação.
   configurado); a política de retenção LGPD desses traces ainda é uma fase
   futura.
 - Sem reranker, sumarização de histórico ou memória semântica de mensagens.
+- A devolução/troca implementa elegibilidade e orientação; ainda não persiste
+  uma solicitação formal nem acompanha o fluxo de aprovação.
+- Fora da região metropolitana de Campo Grande, o frete retorna as modalidades
+  e prazos, mas exige cotação por CEP/peso/dimensões; não há integração com
+  Correios ou Jadlog.
+- A validade de promoção depende de `starts_at`/`ends_at`; promoções antigas
+  sem essas datas continuam sendo tratadas como sem limite de vigência.
 - Os traces guardam prompts e conteúdo de conversa (dados sensíveis) em tabelas
   internas; a política completa de LGPD/retenção fica para uma próxima fase.
 - A validação de URL do webhook bloqueia hosts privados em hml/prod, mas não
   cobre DNS rebinding.
+- A imagem do worker de ingestão ainda não foi otimizada; o tamanho atual e o
+  plano de redução estão documentados em
+  [`docs/worker_image_size.md`](docs/worker_image_size.md).

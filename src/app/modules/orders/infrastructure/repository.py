@@ -22,8 +22,10 @@ class SqlAlchemyOrderRepository:
                 "status": order.status,
                 "total_brl": order.total_brl,
                 "payment_method": order.payment_method,
+                "sales_channel": order.sales_channel,
                 "tracking_code": order.tracking_code,
                 "estimated_delivery": order.estimated_delivery,
+                "delivered_at": order.delivered_at,
                 "notes": order.notes,
             }
             if order.order_id is not None:
@@ -37,6 +39,9 @@ class SqlAlchemyOrderRepository:
                 OrderItemModel(
                     product_id=item.product_id,
                     quantity=item.quantity,
+                    is_final_sale=item.is_final_sale,
+                    is_customized=item.is_customized,
+                    is_hygiene_restricted=item.is_hygiene_restricted,
                 )
                 for item in order.items
             ]
@@ -94,8 +99,10 @@ class SqlAlchemyOrderRepository:
             model.status = order.status
             model.total_brl = order.total_brl
             model.payment_method = order.payment_method
+            model.sales_channel = order.sales_channel
             model.tracking_code = order.tracking_code
             model.estimated_delivery = order.estimated_delivery
+            model.delivered_at = order.delivered_at
             model.notes = order.notes
             self._sync_items(model, order)
 
@@ -147,7 +154,13 @@ class SqlAlchemyOrderRepository:
                     OrderItemModel(
                         product_id=product_id,
                         quantity=item.quantity,
+                        is_final_sale=item.is_final_sale,
+                        is_customized=item.is_customized,
+                        is_hygiene_restricted=item.is_hygiene_restricted,
                     )
                 )
             else:
                 current.quantity = item.quantity
+                current.is_final_sale = item.is_final_sale
+                current.is_customized = item.is_customized
+                current.is_hygiene_restricted = item.is_hygiene_restricted

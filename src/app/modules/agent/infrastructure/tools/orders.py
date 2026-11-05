@@ -96,10 +96,20 @@ def _to_summary(model: OrderModel) -> OrderSummary:
         total_brl=float(model.total_brl),
         payment_method=model.payment_method.value,
         order_date=model.order_date.isoformat(),
+        sales_channel=(
+            model.sales_channel.value
+            if model.sales_channel is not None
+            else None
+        ),
         tracking_code=model.tracking_code,
         estimated_delivery=(
             model.estimated_delivery.isoformat()
             if model.estimated_delivery is not None
+            else None
+        ),
+        delivered_at=(
+            model.delivered_at.isoformat()
+            if model.delivered_at is not None
             else None
         ),
         items=tuple(
@@ -111,6 +121,9 @@ def _to_summary(model: OrderModel) -> OrderSummary:
                     else None
                 ),
                 quantity=item.quantity,
+                is_final_sale=item.is_final_sale,
+                is_customized=item.is_customized,
+                is_hygiene_restricted=item.is_hygiene_restricted,
             )
             for item in model.items
         ),

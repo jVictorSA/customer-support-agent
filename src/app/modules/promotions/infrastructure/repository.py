@@ -18,6 +18,8 @@ class SqlAlchemyPromotionRepository:
                 "discount_percent": promotion.discount_percent,
                 "description": promotion.description,
                 "is_active": promotion.is_active,
+                "starts_at": promotion.starts_at,
+                "ends_at": promotion.ends_at,
             }
             if promotion.promotion_id is not None:
                 values["promotion_id"] = promotion.promotion_id
@@ -75,6 +77,8 @@ class SqlAlchemyPromotionRepository:
             model.discount_percent = promotion.discount_percent
             model.description = promotion.description
             model.is_active = promotion.is_active
+            model.starts_at = promotion.starts_at
+            model.ends_at = promotion.ends_at
             await self._session.flush()
             return model.to_domain()
 

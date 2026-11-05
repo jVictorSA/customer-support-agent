@@ -11,6 +11,8 @@ class PromotionResponse(BaseModel):
     discount_percent: int
     description: str | None
     is_active: bool
+    starts_at: datetime | None
+    ends_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -25,6 +27,8 @@ class PromotionResponse(BaseModel):
             discount_percent=promotion.discount_percent,
             description=promotion.description,
             is_active=promotion.is_active,
+            starts_at=promotion.starts_at,
+            ends_at=promotion.ends_at,
             created_at=promotion.created_at,
             updated_at=promotion.updated_at,
         )

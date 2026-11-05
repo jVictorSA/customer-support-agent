@@ -55,6 +55,8 @@ class CatalogPromotion:
     promotion_id: int
     discount_percent: int
     description: str | None
+    starts_at: str | None = None
+    ends_at: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +78,9 @@ class OrderItemSummary:
     product_id: int
     product_name: str | None
     quantity: int
+    is_final_sale: bool = False
+    is_customized: bool = False
+    is_hygiene_restricted: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,8 +90,10 @@ class OrderSummary:
     total_brl: float
     payment_method: str
     order_date: str
+    sales_channel: str | None
     tracking_code: str | None
     estimated_delivery: str | None
+    delivered_at: str | None
     items: tuple[OrderItemSummary, ...] = ()
 
 

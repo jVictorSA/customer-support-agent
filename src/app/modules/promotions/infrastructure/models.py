@@ -1,5 +1,8 @@
+from datetime import datetime
+
 from sqlalchemy import (
     CheckConstraint,
+    DateTime,
     ForeignKey,
     Identity,
     Index,
@@ -19,6 +22,10 @@ class PromotionModel(TimestampMixin, Base):
             "discount_percent BETWEEN 0 AND 100",
             name="discount_percent_range",
         ),
+        CheckConstraint(
+            "starts_at IS NULL OR ends_at IS NULL OR starts_at <= ends_at",
+            name="promotion_validity_window",
+        ),
         Index("ix_promotions_product_id", "product_id"),
         Index("ix_promotions_is_active", "is_active"),
     )
@@ -31,6 +38,12 @@ class PromotionModel(TimestampMixin, Base):
     discount_percent: Mapped[int] = mapped_column(nullable=False)
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
+    starts_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    ends_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     product: Mapped["ProductModel"] = relationship(
         back_populates="promotions",
@@ -43,6 +56,8 @@ class PromotionModel(TimestampMixin, Base):
             discount_percent=self.discount_percent,
             description=self.description,
             is_active=self.is_active,
+            starts_at=self.starts_at,
+            ends_at=self.ends_at,
             created_at=self.created_at,
             updated_at=self.updated_at,
         )

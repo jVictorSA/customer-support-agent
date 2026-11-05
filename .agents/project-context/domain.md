@@ -50,12 +50,16 @@ in the domain.
   (`cancelled` | `confirmed` | `delivered` | `pending` | `shipped`, native
   enum), `total_brl` (numeric), `payment_method`
   (`boleto` | `pix` | `debit` | `credit_3x` | `credit_6x` | `credit_12x`,
-  native enum), `tracking_code`, `estimated_delivery`, `notes`.
-- **order_items** — composite PK `(order_id, product_id)`, `quantity` (int).
-  Join table between orders and products; it is part of the `orders` module.
+  native enum), `sales_channel` (`online` | `in_store`), `tracking_code`,
+  `estimated_delivery`, `delivered_at`, `notes`.
+- **order_items** — composite PK `(order_id, product_id)`, `quantity` (int),
+  and return restrictions `is_final_sale`, `is_customized`,
+  `is_hygiene_restricted`. Join table between orders and products; it is part of
+  the `orders` module.
 - **promotions** — `promotion_id` (int), `product_id` (FK),
-  `discount_percent` (int, 0–100), `description`, `is_active` (bool). One
-  product may have multiple promotions.
+  `discount_percent` (int, 0–100), `description`, `is_active` (bool),
+  `starts_at`, `ends_at`. One product may have multiple promotions; validity
+  requires `is_active` and the current time inside the optional window.
 
 ## Business rules to preserve
 
@@ -149,7 +153,8 @@ Operational data is loaded from six CSVs through `import-csv <directory>`:
   `complaints`, `agent`) with JWT login, conversation/message persistence,
   complaint registration, hybrid retrieval, ReAct orchestration, deterministic
   catalog/order tools, response writing, grounding validation, durable traces
-  and signed webhook delivery.
+  and signed webhook delivery. Store-policy tools cover opening hours, return
+  eligibility, payment options and shipping estimates.
 - Implemented: opt-in Text-to-SQL for catalog, stock, promotions and the
   authenticated customer's own orders. It exposes six deterministic metrics
   (`my_total_spent`, `my_order_count`, `my_average_order_value`,
@@ -158,8 +163,8 @@ Operational data is loaded from six CSVs through `import-csv <directory>`:
   intentionally unavailable.
 - Not implemented: POST/PUT/PATCH/DELETE routes for the operational business
   modules, authentication on `/customers` and `/orders`, reranking, semantic
-  memory, complaint resolution workflow and full LGPD retention policy for
-  traces.
+  memory, complaint resolution workflow, formal return-request persistence and
+  full LGPD retention policy for traces.
 - The `health` module remains the smallest structural reference; the business
   modules show the full CRUD/pagination pattern, and the conversation modules
   show the async agent workflow.

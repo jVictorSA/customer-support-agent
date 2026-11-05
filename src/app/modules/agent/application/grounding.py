@@ -41,6 +41,9 @@ class GroundingValidator:
                     "get_product_details",
                     "list_my_orders",
                     "get_order_status",
+                    "check_return_eligibility",
+                    "calculate_payment_options",
+                    "estimate_shipping",
                     "text_to_sql",
                 }
                 for result in outcome.tool_results
@@ -50,6 +53,16 @@ class GroundingValidator:
                     "a pergunta exige dado operacional, mas nenhuma consulta "
                     "de catálogo, pedido ou SQL foi concluída"
                 )
+
+        required_tool = _required_tool(intent)
+        if required_tool is not None and not any(
+            result.ok and result.tool_name == required_tool
+            for result in outcome.tool_results
+        ):
+            errors.append(
+                f"a pergunta exige a ferramenta {required_tool}, mas ela não "
+                "foi concluída"
+            )
 
         if intent.primary_intent.value == "analytics":
             sql_results = [
@@ -107,6 +120,17 @@ class GroundingValidator:
         if not answer.message.strip():
             errors.append("mensagem vazia")
         return errors
+
+
+def _required_tool(intent: Intent) -> str | None:
+    entities = intent.entities
+    if entities.get("return_reason"):
+        return "check_return_eligibility"
+    if entities.get("cep"):
+        return "estimate_shipping"
+    if entities.get("installments") is not None:
+        return "calculate_payment_options"
+    return None
 
 
 def _numbers_from_results(results: tuple[ToolResult, ...]) -> list[float]:

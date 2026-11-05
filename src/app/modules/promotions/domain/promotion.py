@@ -9,5 +9,7 @@ class Promotion:
     discount_percent: int
     description: str | None
     is_active: bool
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
