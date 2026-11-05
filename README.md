@@ -10,6 +10,27 @@ embeddings, e o fluxo de atendimento conversacional já implementa login JWT,
 conversas, mensagens, reclamações, processamento assíncrono via Celery e o
 agente ReAct com tools de RAG, catálogo, pedidos e reclamações.
 
+## Sumário
+
+- [Stack](#stack)
+- [Requisitos](#requisitos)
+- [Configuração do ambiente](#configuração-do-ambiente)
+- [Como executar](#como-executar)
+- [Text-to-SQL](#text-to-sql)
+- [Migrations](#migrations)
+- [Importação de dados](#importação-de-dados)
+- [Ingestão de documentos](#ingestão-de-documentos)
+- [Atendimento conversacional](#atendimento-conversacional)
+- [Perguntas de exemplo](#perguntas-de-exemplo)
+- [Testes](#testes)
+- [Endpoints](#endpoints)
+- [Ambientes de hml/prod](#ambientes-de-hmlprod)
+- [Estrutura do projeto](#estrutura-do-projeto)
+- [Codificação com agentes de IA](#codificação-com-agentes-de-ia)
+- [Decisões de arquitetura](#decisões-de-arquitetura)
+- [O que eu faria com mais tempo](#o-que-eu-faria-com-mais-tempo)
+- [Limitações conhecidas](#limitações-conhecidas)
+
 ## Stack
 
 - [Python 3.12+](https://www.python.org/)
@@ -348,6 +369,34 @@ O receiver de desenvolvimento existe apenas com `APP_ENV=development`, valida a
 assinatura HMAC e não persiste o payload. Para usar `http://127.0.0.1:8000` no
 host, mantenha `CONVERSATION_WEBHOOK_ALLOW_PRIVATE_HOSTS=true` no `.env`.
 
+## Perguntas de exemplo
+
+As conversas completas estão em
+[`docs/examples/conversas.md`](docs/examples/conversas.md). As perguntas abaixo
+cobrem os principais cenários de atendimento e ajudam a validar a escolha de
+tools e políticas:
+
+| Cenário | Pergunta de exemplo | Consulta esperada |
+| --- | --- | --- |
+| Catálogo | Quais opções de violões disponíveis custando até R$ 1000? | `search_catalog` |
+| Preço e estoque | Quanto custa o Takamine GD20 e tem em estoque? | `search_catalog`/`get_product_details` |
+| Informações da loja | Qual o endereço da loja? | `search_store_knowledge` |
+| Horário | Qual o horário de funcionamento? Vocês estão abertos agora? | `search_store_knowledge` + status de expediente |
+| Pedido | Qual o status e o rastreamento do meu pedido? | `list_my_orders`/`get_order_status` |
+| Devolução | Me arrependi da minha compra, posso devolver meu pedido? | `search_store_knowledge` + elegibilidade de devolução |
+| Pagamento | Quanto fica o Yamaha C40 em 12x? Tem desconto no PIX? | `search_store_knowledge` + cálculo de pagamento |
+| Frete | Qual o frete para o CEP 79000-000? | `search_store_knowledge` + cálculo de frete |
+| Promoção | A promoção do Yamaha C40 ainda está válida? | `search_store_knowledge`/catálogo com validade |
+| Reclamação | Meu pedido atrasou e quero registrar uma reclamação. | `register_complaint` |
+| Fora do escopo | Vocês vendem cordas de violão e palhetas? | redirecionamento de acessório |
+| Fora do escopo | Me passa uma receita de bolo? | redirecionamento de assunto geral |
+
+As perguntas de horário, validade de promoção, elegibilidade de devolução e
+cálculo de pagamento/frete também estão listadas em
+[`docs/examples/conversas.md`](docs/examples/conversas.md). As validações
+determinísticas desses cenários fazem parte das melhorias planejadas; os
+exemplos documentam o comportamento esperado do agente.
+
 ## Testes
 
 Testes unitários e de contrato:
@@ -627,6 +676,27 @@ cliente é o produto, não o assistente de codificação.
 - **Traces completos** em `agent_runs`/`agent_steps` (prompts, tools, tokens,
   latência e erros) para evolução futura do agente.
 
+## O que eu faria com mais tempo
+
+- **Prompts no banco de dados com cache em Redis**: permitir ajustes de prompt
+  sem deploy, versionamento e rollback, mantendo os prompts quentes em runtime.
+- **Contenção de reclamações e transbordo humano**: criar fila/atribuição para o
+  time responsável, SLA de retorno, resolução e transbordo controlado para evitar
+  sobrecarga do atendimento.
+- **CRUD completo dos módulos operacionais**: complementar as rotas GET atuais
+  com escrita para categorias, produtos, clientes, pedidos e promoções.
+- **RBAC e papéis na API**: separar permissões de cliente, atendente,
+  operador e administrador nas rotas autenticadas.
+- **Processamento autoevolutivo dos agentes**: usar os traces já persistidos
+  para avaliar, comparar e evoluir prompts, tools e políticas de roteamento.
+- **Canais omnichannel**: adicionar entrada/saída para WhatsApp, web, Messenger
+  e Instagram com uma camada comum de conversas e entrega.
+- **Testes de LLM/agentes com DeepEval**: medir qualidade de resposta,
+  fidelidade às políticas, uso correto de tools e regressões de prompt.
+- **Reduzir a imagem do ingestion worker**: hoje ela chega a ~11 GB no target de
+  desenvolvimento. O diagnóstico e o plano de redução estão em
+  [`docs/worker_image_size.md`](docs/worker_image_size.md).
+
 ## Limitações conhecidas
 
 - `/customers` e `/orders` ainda não exigem JWT; a proteção desta iteração cobre
@@ -646,3 +716,6 @@ cliente é o produto, não o assistente de codificação.
   internas; a política completa de LGPD/retenção fica para uma próxima fase.
 - A validação de URL do webhook bloqueia hosts privados em hml/prod, mas não
   cobre DNS rebinding.
+- A imagem do worker de ingestão ainda não foi otimizada; o tamanho atual e o
+  plano de redução estão documentados em
+  [`docs/worker_image_size.md`](docs/worker_image_size.md).
